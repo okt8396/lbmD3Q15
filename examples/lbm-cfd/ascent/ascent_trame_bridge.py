@@ -29,11 +29,6 @@ def main():
     # broadcast updates to all ranks
     update_data = comm.bcast(update_data, root=0)
 
-    #f = open(f'sim_data_{task_id:02d}.txt', 'w', encoding='utf-8')
-    #f.write(f'{update_data}\n')
-    #f.close()
-
-
     #  pass updates to Ascent callback
     update_node = conduit.Node()
     update_node['task_id'] = task_id
@@ -72,13 +67,16 @@ def executeMainTask(task_id, num_tasks, comm):
         # get published blueprint data
         mesh_data = ascent_data().child(0)
 
+        # repartition data -> gather on main process (0)
+        result = repartitionMeshData(task_id, num_tasks, comm)
+
         num_barriers = mesh_data["state/num_barriers"]
         barriers = mesh_data["state/barriers"].reshape((num_barriers, 4))
-        topology_name = mesh_data['fields/vorticity_whole/topology']
-        coordset_name = mesh_data[f'topologies/{topology_name}/coordset']
-        dim_x = mesh_data[f'coordsets/{coordset_name}/dims/i'] - 1 # 1 fewer element than vertex
-        dim_y = mesh_data[f'coordsets/{coordset_name}/dims/j'] - 1 # 1 fewer element than vertex
-        vorticity = mesh_data['fields/vorticity_whole/values'].reshape((dim_y, dim_x))
+        topology_name = result['fields/vorticity/topology']
+        coordset_name = result[f'topologies/{topology_name}/coordset']
+        dim_x = result[f'coordsets/{coordset_name}/dims/i'] - 1 # 1 fewer element than vertex
+        dim_y = result[f'coordsets/{coordset_name}/dims/j'] - 1 # 1 fewer element than vertex
+        vorticity = result['fields/vorticity/values'].reshape((dim_y, dim_x))
 
         # send simulation data to Trame
         queue_data.put({'barriers': barriers, 'vorticity': vorticity})
@@ -88,6 +86,7 @@ def executeMainTask(task_id, num_tasks, comm):
 
     return update_data
 
+
 def executeDependentTask(task_id, num_tasks, comm):
     interactive = np.array([False], bool)
 
@@ -95,63 +94,35 @@ def executeDependentTask(task_id, num_tasks, comm):
     comm.Bcast((interactive, 1, MPI.BOOL), root=0)
 
     if interactive[0]:
-        pass
-
-def old():
-    #f = open(f'sim_data_{task_id:02d}.txt', 'w', encoding='utf-8')
-    #f.write(f'RANK {task_id}\n')
-
-    update_data = None
-    if task_id == 0:
-        # get rank 0's published blueprint data
-        mesh_data = ascent_data().child(0)
-        f = open(f'sim_data_{task_id:02d}.txt', 'w', encoding='utf-8')
-        f.write(f'{mesh_data.to_yaml()}\n')
-        f.close()
+        # repartition data -> gather on main process (0)
+        repartitionMeshData(task_id, num_tasks, comm)
 
 
-        topology_name = mesh_data['fields/vorticity_whole/topology']
-        #f.write(f'{topology_name}\n')
-        coordset_name = mesh_data[f'topologies/{topology_name}/coordset']
-        #f.write(f'{coordset_name}\n')
-        dim_x = mesh_data[f'coordsets/{coordset_name}/dims/i'] - 1 # 1 fewer element than vertex
-        dim_y = mesh_data[f'coordsets/{coordset_name}/dims/j'] - 1 # 1 fewer element than vertex
-        #f.write(f'{dim_x}x{dim_y}\n')
-        vorticity = mesh_data['fields/vorticity_whole/values'].reshape((dim_y, dim_x))
+def repartitionMeshData(task_id, num_tasks, comm):
+    # get published blueprint data
+    mesh_data = ascent_data().child(0)
 
-        QueueManager.register('get_data_queue')
-        QueueManager.register('get_signal_queue')
-        mgr = QueueManager(address=('127.0.0.1', 8000), authkey=b'ascent-trame')
-
-        try:
-            mgr.connect()
-
-            queue_data = mgr.get_data_queue()
-            queue_signal = mgr.get_signal_queue()
-
-            num_barriers = mesh_data["state/num_barriers"]
-            barriers = mesh_data["state/barriers"].reshape((num_barriers, 4))
-
-            queue_data.put({'barriers': barriers, 'vorticity': vorticity})
-            update_data = queue_signal.get()
-        except:
-            update_data = {}
-
-    #f.close()
-
-    # broadcast updates to all ranks, then pass to Ascent callback
-    update_data = comm.bcast(update_data, root=0)
-
-    update_node = conduit.Node()
-    update_node['task_id'] = task_id
-    if 'flow_speed' in update_data:
-        update_node['flow_speed'] = update_data['flow_speed']
-    if 'barriers' in update_data:
-        num_barriers = update_data['barriers'].shape[0]
-        update_node['num_barriers'] = num_barriers
-        update_node['barriers'].set_external(update_data['barriers'].reshape(num_barriers * 4))
+    # Conduit Blueprint MPI not exposed in Python -> callback to C++ app for repartition instead
     output = conduit.Node()
-    ascent.mpi.execute_callback('steeringCallback', update_node, output)
+    ascent.mpi.execute_callback('repartitionCallback', mesh_data, output)
+
+    # once Conduit Blueprint MPI is available, use the following instead:
+    """
+    layout = np.array([mesh_data["state/coords/start/x"],
+                       mesh_data["state/coords/start/y"],
+                       mesh_data["state/coords/size/x"],
+                       mesh_data["state/coords/size/y"]], dtype=np.uint32)
+
+    layout_all = np.empty(4 * num_tasks, dtype=np.uint32)
+    comm.Allgather((layout, 4, MPI.UNSIGNED_INT), (layout_all, 4, MPI.UNSIGNED_INT))
+
+    options = conduit.Node()
+    selections = conduit.Node()
+    output = conduit.blueprint.mpi.mesh.partition(mesh_data, options, comm)
+    """
+
+    return output
+
 
 main()
 

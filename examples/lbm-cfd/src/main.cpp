@@ -15,6 +15,7 @@ void createDivergingColorMap(uint8_t *cmap, uint32_t size);
 #ifdef ASCENT_ENABLED
 void updateAscentData(int rank, int num_ranks, int step, double time, conduit::Node &mesh);
 void runAscentInSituTasks(conduit::Node &mesh, conduit::Node &selections, ascent::Ascent *ascent_ptr);
+void repartitionCallback(conduit::Node &params, conduit::Node &output);
 void steeringCallback(conduit::Node &params, conduit::Node &output);
 #endif
 int32_t readFile(const char *filename, char** data_ptr);
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
     ascent_opts["mpi_comm"] = MPI_Comm_c2f(comm);
     ascent.open(ascent_opts);
 
+    ascent::register_callback("repartitionCallback", repartitionCallback);
     ascent::register_callback("steeringCallback", steeringCallback);
 
     ascent_ptr = &ascent;
@@ -127,16 +129,6 @@ void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y
 #ifdef ASCENT_ENABLED
     int i;
     conduit::Node selections;
-    for (i = 0; i < num_ranks; i++)
-    {
-        uint32_t *rank_start = lbm->getRankLocalStart(i);
-        uint32_t *rank_size = lbm->getRankLocalSize(i);
-        conduit::Node &selection = selections.append();
-        selection["type"] = "logical";
-        selection["domain_id"] = i;
-        selection["start"] = {rank_start[0], rank_start[1], 0u};
-        selection["end"] = {rank_start[0] + rank_size[0] - 1u, rank_start[1] + rank_size[1] - 1u, 0u};
-    }
 #endif
     for (t = 0; t < time_steps; t++)
     {
@@ -198,11 +190,17 @@ void updateAscentData(int rank, int num_ranks, int step, double time, conduit::N
         barrier_data[4 * i + 3] = barriers[i]->getY2();
     }
 
-    uint32_t *start = lbm->getRankLocalStart(rank);
+    uint32_t start_x = lbm->getStartX();
+    uint32_t start_y = lbm->getStartY();
 
     mesh["state/domain_id"] = rank;
+    mesh["state/num_domains"] = num_ranks;
     mesh["state/cycle"] = step;
     mesh["state/time"] = time;
+    mesh["state/coords/start/x"] = lbm->getStartX();
+    mesh["state/coords/start/y"] = lbm->getStartY();
+    mesh["state/coords/size/x"] = lbm->getSizeX();
+    mesh["state/coords/size/y"] = lbm->getSizeY();
     mesh["state/num_barriers"] = barriers.size();
     mesh["state/barriers"].set(barrier_data, barriers.size() * 4);
     
@@ -210,8 +208,8 @@ void updateAscentData(int rank, int num_ranks, int step, double time, conduit::N
     mesh["coordsets/coords/dims/i"] = dim_x + 1;
     mesh["coordsets/coords/dims/j"] = dim_y + 1;
 
-    mesh["coordsets/coords/origin/x"] = offset_x - start[0];
-    mesh["coordsets/coords/origin/y"] = offset_y - start[1];
+    mesh["coordsets/coords/origin/x"] = offset_x - start_x;
+    mesh["coordsets/coords/origin/y"] = offset_y - start_y;
     mesh["coordsets/coords/spacing/dx"] = 1;
     mesh["coordsets/coords/spacing/dy"] = 1;
 
@@ -222,7 +220,7 @@ void updateAscentData(int rank, int num_ranks, int step, double time, conduit::N
     mesh["fields/vorticity/topology"] = "topo";
     mesh["fields/vorticity/values"].set_external(lbm->getVorticity(), prop_size);
 
-
+/*
     conduit::Node options, selections, output;
     for (i = 0; i < num_ranks; i++)
     {
@@ -252,7 +250,7 @@ void updateAscentData(int rank, int num_ranks, int step, double time, conduit::N
         mesh["fields/vorticity_whole/topology"] = "topo_whole";
         mesh["fields/vorticity_whole/values"] = output["fields/vorticity/values"];
     }
-
+*/
     delete[] barrier_data;
 }
 
@@ -261,20 +259,6 @@ void runAscentInSituTasks(conduit::Node &mesh, conduit::Node &selections, ascent
     ascent_ptr->publish(mesh);
 
     conduit::Node actions;
-
-    /*
-    //
-    conduit::Node &add_pipelines = actions.append();
-    add_pipelines["action"] = "add_pipelines";
-    conduit::Node &pipelines = add_pipelines["pipelines"];
-    pipelines["pl1/f1/type"] = "partition";
-    pipelines["pl1/f1/params/target"] = 1;
-    pipelines["pl1/f1/params/fields"] = {"vorticity"};
-    pipelines["pl1/f1/params/selections"] = selections;
-    pipelines["pl1/f1/params/mapping"] = 0;
-    //
-    */
-
     conduit::Node &add_extracts = actions.append();
     add_extracts["action"] = "add_extracts";
     conduit::Node &extracts = add_extracts["extracts"];
@@ -288,6 +272,38 @@ void runAscentInSituTasks(conduit::Node &mesh, conduit::Node &selections, ascent
     //std::cout << actions.to_yaml() << std::endl;
 
     ascent_ptr->execute(actions);
+}
+
+void repartitionCallback(conduit::Node &params, conduit::Node &output)
+{
+    int num_ranks = (int)params["state/num_domains"].as_int32();
+    uint32_t layout[4] = {params["state/coords/start/x"].as_uint32(), params["state/coords/start/y"].as_uint32(),
+                          params["state/coords/size/x"].as_uint32(), params["state/coords/size/y"].as_uint32()};
+    uint32_t *layout_all = new uint32_t[4 * num_ranks];
+    MPI_Allgather(layout, 4, MPI_UNSIGNED, layout_all, 4, MPI_UNSIGNED, MPI_COMM_WORLD);
+
+    int i;
+    conduit::Node options, selections;
+    for (i = 0; i < num_ranks; i++)
+    {
+        uint32_t rank_start_x = layout_all[4 * i];
+        uint32_t rank_start_y = layout_all[4 * i + 1];
+        uint32_t rank_size_x = layout_all[4 * i + 2];
+        uint32_t rank_size_y = layout_all[4 * i + 3];
+        conduit::Node &selection = selections.append();
+        selection["type"] = "logical";
+        selection["domain_id"] = i;
+        selection["start"] = {rank_start_x, rank_start_y, 0u};
+        selection["end"] = {rank_start_x + rank_size_x - 1u, rank_start_y + rank_size_y - 1u, 0u};
+    }
+    options["target"] = 1;
+    options["fields"] = {"vorticity"};
+    options["selections"] = selections;
+    options["mapping"] = 0;
+
+    conduit::blueprint::mpi::mesh::partition(params, options, output, MPI_COMM_WORLD);
+
+    delete[] layout_all;
 }
 
 void steeringCallback(conduit::Node &params, conduit::Node &output)
