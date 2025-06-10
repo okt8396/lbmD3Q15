@@ -79,15 +79,21 @@ class LbmD2Q9
         //uint32_t *rank_local_start;
         double speed_scale;
         double *f_0;
-        double *f_N;
-        double *f_E;
-        double *f_S;
-        double *f_W;
-        double *f_NE;
-        double *f_NW;
-        double *f_SE;
-        double *f_SW;
-        double *density;
+        double *f_1;
+        double *f_2;
+        double *f_3;
+        double *f_4;
+        double *f_5;
+        double *f_6;
+        double *f_7;
+        double *f_8;
+	double *f_9;
+	double *f_10;
+	double *f_11;
+	double *f_12;
+	double *f_13;
+	double *f_14;
+	double *density;
         double *velocity_x;
         double *velocity_y;
         double *vorticity;
@@ -244,14 +250,14 @@ LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, double scale, int task_id, int
 
     // set array pointers
     f_0        = dbl_arrays;
-    f_N        = dbl_arrays + (   size);
-    f_E        = dbl_arrays + ( 2*size);
-    f_S        = dbl_arrays + ( 3*size);
-    f_W        = dbl_arrays + ( 4*size);
-    f_NE       = dbl_arrays + ( 5*size);
-    f_NW       = dbl_arrays + ( 6*size);
-    f_SE       = dbl_arrays + ( 7*size);
-    f_SW       = dbl_arrays + ( 8*size);
+    f_1        = dbl_arrays + (   size);
+    f_2        = dbl_arrays + ( 2*size);
+    f_3        = dbl_arrays + ( 3*size);
+    f_4        = dbl_arrays + ( 4*size);
+    f_5       = dbl_arrays + ( 5*size);
+    f_6       = dbl_arrays + ( 6*size);
+    f_7       = dbl_arrays + ( 7*size);
+    f_8       = dbl_arrays + ( 8*size);
     density    = dbl_arrays + ( 9*size);
     velocity_x = dbl_arrays + (10*size);
     velocity_y = dbl_arrays + (11*size);
@@ -367,9 +373,9 @@ void LbmD2Q9::collide(double viscosity)
         for (i = 1; i < dim_x - 1; i++)
         {
             idx = row + i;
-            density[idx] = f_0[idx] + f_N[idx] + f_S[idx] + f_E[idx] + f_W[idx] + f_NW[idx] + f_NE[idx] + f_SW[idx] + f_SE[idx];
-            velocity_x[idx] = (f_E[idx] + f_NE[idx] + f_SE[idx] - f_W[idx] - f_NW[idx] - f_SW[idx]) / density[idx];
-            velocity_y[idx] = (f_N[idx] + f_NE[idx] + f_NW[idx] - f_S[idx] - f_SE[idx] - f_SW[idx]) / density[idx];
+            density[idx] = f_0[idx] + f_1[idx] + f_3[idx] + f_2[idx] + f_4[idx] + f_6[idx] + f_5[idx] + f_8[idx] + f_7[idx];
+            velocity_x[idx] = (f_2[idx] + f_5[idx] + f_7[idx] - f_4[idx] - f_6[idx] - f_8[idx]) / density[idx];
+            velocity_y[idx] = (f_1[idx] + f_5[idx] + f_6[idx] - f_3[idx] - f_7[idx] - f_8[idx]) / density[idx];
             double one_ninth_density       = (1.0 /  9.0) * density[idx];
             double four_ninths_density     = (4.0 /  9.0) * density[idx];
             double one_thirtysixth_density = (1.0 / 36.0) * density[idx];
@@ -381,14 +387,14 @@ void LbmD2Q9::collide(double viscosity)
             double vecocity_2    = velocity_x2 + velocity_y2;
             double vecocity_2_15 = 1.5 * vecocity_2;
             f_0[idx]  += omega * (four_ninths_density     * (1                                                                 - vecocity_2_15) - f_0[idx]);
-            f_E[idx]  += omega * (one_ninth_density       * (1 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_E[idx]);
-            f_W[idx]  += omega * (one_ninth_density       * (1 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_W[idx]);
-            f_N[idx]  += omega * (one_ninth_density       * (1 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_N[idx]);
-            f_S[idx]  += omega * (one_ninth_density       * (1 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_S[idx]);
-            f_NE[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_NE[idx]);
-            f_SE[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_SE[idx]);
-            f_NW[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_NW[idx]);
-            f_SW[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_SW[idx]);
+            f_2[idx]  += omega * (one_ninth_density       * (1 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_2[idx]);
+            f_4[idx]  += omega * (one_ninth_density       * (1 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_4[idx]);
+            f_1[idx]  += omega * (one_ninth_density       * (1 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_1[idx]);
+            f_3[idx]  += omega * (one_ninth_density       * (1 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_3[idx]);
+            f_5[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_5[idx]);
+            f_7[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_7[idx]);
+            f_6[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_6[idx]);
+            f_8[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_8[idx]);
         }
     }
 
@@ -405,8 +411,8 @@ void LbmD2Q9::stream()
         rowp = (j - 1) * dim_x;
         for (i = 1; i < dim_x - 1; i++)
         {
-            f_N[row + i] =  f_N[rowp + i];
-            f_NW[row + i] = f_NW[rowp + i + 1];
+            f_1[row + i] =  f_1[rowp + i];
+            f_6[row + i] = f_6[rowp + i + 1];
         }
     }
     for (j = dim_y - 2; j > 0; j--) // then start in NE corner...
@@ -415,8 +421,8 @@ void LbmD2Q9::stream()
         rowp = (j - 1) * dim_x;
         for (i = dim_x - 2; i > 0; i--)
         {
-            f_E[row + i] =  f_E[row + i - 1];
-            f_NE[row + i] = f_NE[rowp + i - 1];
+            f_2[row + i] =  f_2[row + i - 1];
+            f_5[row + i] = f_5[rowp + i - 1];
         }
     }
     for (j = 1; j < dim_y - 1; j++) // then start in SE corner...
@@ -425,8 +431,8 @@ void LbmD2Q9::stream()
         rown = (j + 1) * dim_x;
         for (i = dim_x - 2; i > 0; i--)
         {
-            f_S[row + i] =  f_S[rown + i];
-            f_SE[row + i] = f_SE[rown + i - 1];
+            f_3[row + i] =  f_3[rown + i];
+            f_7[row + i] = f_7[rown + i - 1];
         }
     }
     for (j = 1; j < dim_y - 1; j++) // then start in the SW corner...
@@ -435,8 +441,8 @@ void LbmD2Q9::stream()
         rown = (j + 1) * dim_x;
         for (i = 1; i < dim_x - 1; i++)
         {
-            f_W[row + i] =  f_W[row + i + 1];
-            f_SW[row + i] = f_SW[rown + i + 1];
+            f_4[row + i] =  f_4[row + i + 1];
+            f_8[row + i] = f_8[rown + i + 1];
         }
     }
 
@@ -457,35 +463,35 @@ void LbmD2Q9::bounceBackStream()
             idx = row + i;
             if (barrier[row + i - 1])
             {
-                f_E[idx] = f_W[row + i - 1];
+                f_2[idx] = f_4[row + i - 1];
             }
             if (barrier[row + i + 1])
             {
-                f_W[idx] = f_E[row + i + 1];
+                f_4[idx] = f_2[row + i + 1];
             }
             if (barrier[rowp + i])
             {
-                f_N[idx] =   f_S[rowp + i];
+                f_1[idx] =   f_3[rowp + i];
             }
             if (barrier[rown + i])
             {
-                f_S[idx] =   f_N[rown + i];
+                f_3[idx] =   f_1[rown + i];
             }
             if (barrier[rowp + i - 1])
             {
-                f_NE[idx] =  f_SW[rowp + i - 1];
+                f_5[idx] =  f_8[rowp + i - 1];
             }
             if (barrier[rowp + i + 1])
             {
-                f_NW[idx] =  f_SE[rowp + i + 1];
+                f_6[idx] =  f_7[rowp + i + 1];
             }
             if (barrier[rown + i - 1])
             {
-                f_SE[idx] =  f_NW[rown + i - 1];
+                f_7[idx] =  f_6[rown + i - 1];
             }
             if (barrier[rown + i + 1])
             {
-                f_SW[idx] =  f_NE[rown + i + 1];
+                f_8[idx] =  f_5[rown + i + 1];
             }
         }
     }
@@ -731,14 +737,14 @@ void LbmD2Q9::setEquilibrium(int x, int y, double new_velocity_x, double new_vel
     double vecocity_2    = velocity_x2 + velocity_y2;
     double vecocity_2_15 = 1.5 * vecocity_2;
     f_0[idx]  = four_ninths     * new_density * (1.0                                                                 - vecocity_2_15);
-    f_E[idx]  = one_ninth       * new_density * (1.0 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
-    f_W[idx]  = one_ninth       * new_density * (1.0 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
-    f_N[idx]  = one_ninth       * new_density * (1.0 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
-    f_S[idx]  = one_ninth       * new_density * (1.0 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
-    f_NE[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
-    f_SE[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
-    f_NW[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
-    f_SW[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
+    f_2[idx]  = one_ninth       * new_density * (1.0 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
+    f_4[idx]  = one_ninth       * new_density * (1.0 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
+    f_1[idx]  = one_ninth       * new_density * (1.0 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
+    f_3[idx]  = one_ninth       * new_density * (1.0 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
+    f_5[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
+    f_7[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
+    f_6[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
+    f_8[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
     density[idx]    = new_density;
     velocity_x[idx] = new_velocity_x;
     velocity_y[idx] = new_velocity_y;
@@ -770,14 +776,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborN] >= 0)
     {
         MPI_Sendrecv(&(f_0[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_0[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_N[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_E[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_S[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_W[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_NE[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_NW[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_SE[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_SW[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_1[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_2[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_3[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[(ny - 2) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_4[(ny - 1) * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_5[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_6[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_7[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[(ny - 2) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(f_8[(ny - 1) * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[(ny - 2) * nx + sx]),    cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(density[(ny - 1) * nx + sx]),    cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[(ny - 2) * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(velocity_x[(ny - 1) * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[(ny - 2) * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborN], NeighborS, &(velocity_y[(ny - 1) * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborN], NeighborN, MPI_COMM_WORLD, &status);
@@ -785,14 +791,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborE] >= 0)
     {
         MPI_Sendrecv(f_0,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_0,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_N,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_N,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_E,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_E,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_S,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_S,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_W,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_W,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_NE,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_NE,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_NW,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_NW,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_SE,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_SE,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_SW,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_SW,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_1,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_1,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_2,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_2,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_3,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_3,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_4,        1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_4,        1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_5,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_5,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_6,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_6,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_7,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_7,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_8,       1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, f_8,       1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(density,    1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, density,    1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(velocity_x, 1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, velocity_x, 1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(velocity_y, 1, columns_2d[RightCol], neighbors[NeighborE], NeighborW, velocity_y, 1, columns_2d[RightBoundaryCol], neighbors[NeighborE], NeighborE, MPI_COMM_WORLD, &status);
@@ -800,14 +806,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborS] >= 0)
     {
         MPI_Sendrecv(&(f_0[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_0[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_N[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_E[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_S[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_W[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_NE[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_NW[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_SE[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_SW[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_1[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_2[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_3[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[sy * nx + sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_4[sx]),        cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_5[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_6[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_7[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[sy * nx + sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(f_8[sx]),       cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[sy * nx + sx]),    cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(density[sx]),    cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[sy * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(velocity_x[sx]), cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[sy * nx + sx]), cx, MPI_DOUBLE, neighbors[NeighborS], NeighborN, &(velocity_y[sx]), cx, MPI_DOUBLE, neighbors[NeighborS], NeighborS, MPI_COMM_WORLD, &status);
@@ -815,14 +821,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborW] >= 0)
     {
         MPI_Sendrecv(f_0,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_0,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_N,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_N,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_E,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_E,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_S,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_S,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_W,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_W,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_NE,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_NE,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_NW,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_NW,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_SE,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_SE,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(f_SW,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_SW,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_1,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_1,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_2,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_2,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_3,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_3,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_4,        1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_4,        1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_5,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_5,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_6,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_6,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_7,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_7,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(f_8,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_8,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(density,    1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, density,    1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(velocity_x, 1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, velocity_x, 1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(velocity_y, 1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, velocity_y, 1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
@@ -830,14 +836,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborNE] >= 0)
     {
         MPI_Sendrecv(&(f_0[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_0[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_N[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_E[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_S[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_W[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_NE[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_NW[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_SE[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_SW[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_1[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_2[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_3[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[(ny - 2) * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_4[(ny - 1) * nx + nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_5[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_6[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_7[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[(ny - 2) * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(f_8[(ny - 1) * nx + nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[(ny - 2) * nx + nx - 2]),    1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(density[(ny - 1) * nx + nx - 1]),    1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[(ny - 2) * nx + nx - 2]), 1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(velocity_x[(ny - 1) * nx + nx - 1]), 1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[(ny - 2) * nx + nx - 2]), 1, MPI_DOUBLE, neighbors[NeighborNE], NeighborSW, &(velocity_y[(ny - 1) * nx + nx - 1]), 1, MPI_DOUBLE, neighbors[NeighborNE], NeighborNE, MPI_COMM_WORLD, &status);
@@ -845,14 +851,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborNW] >= 0)
     {
         MPI_Sendrecv(&(f_0[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_0[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_N[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_E[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_S[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_W[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_NE[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_NW[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_SE[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_SW[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_1[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_2[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_3[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[(ny - 2) * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_4[(ny - 1) * nx]),        1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_5[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_6[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_7[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[(ny - 2) * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(f_8[(ny - 1) * nx]),       1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[(ny - 2) * nx + sx]),    1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(density[(ny - 1) * nx]),    1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[(ny - 2) * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(velocity_x[(ny - 1) * nx]), 1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[(ny - 2) * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborNW], NeighborSE, &(velocity_y[(ny - 1) * nx]), 1, MPI_DOUBLE, neighbors[NeighborNW], NeighborNW, MPI_COMM_WORLD, &status);
@@ -860,14 +866,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborSE] >= 0)
     {
         MPI_Sendrecv(&(f_0[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_0[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_N[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_E[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_S[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_W[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_NE[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_NW[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_SE[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_SW[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_1[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_2[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_3[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[sy * nx + nx - 2]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_4[nx - 1]),        1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_5[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_6[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_7[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[sy * nx + nx - 2]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(f_8[nx - 1]),       1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[sy * nx + nx - 2]),    1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(density[nx - 1]),    1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[sy * nx + nx - 2]), 1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(velocity_x[nx - 1]), 1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[sy * nx + nx - 2]), 1, MPI_DOUBLE, neighbors[NeighborSE], NeighborNW, &(velocity_y[nx - 1]), 1, MPI_DOUBLE, neighbors[NeighborSE], NeighborSE, MPI_COMM_WORLD, &status);
@@ -875,14 +881,14 @@ void LbmD2Q9::exchangeBoundaries()
     if (neighbors[NeighborSW] >= 0)
     {
         MPI_Sendrecv(&(f_0[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_0[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_N[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_N[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_E[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_E[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_S[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_S[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_W[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_W[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NE[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_NE[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_NW[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_NW[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SE[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_SE[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(&(f_SW[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_SW[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_1[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_1[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_2[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_2[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_3[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_3[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_4[sy * nx + sx]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_4[0]),        1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_5[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_5[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_6[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_6[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_7[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_7[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
+        MPI_Sendrecv(&(f_8[sy * nx + sx]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(f_8[0]),       1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(density[sy * nx + sx]),    1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(density[0]),    1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_x[sy * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(velocity_x[0]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(&(velocity_y[sy * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(velocity_y[0]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
