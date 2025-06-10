@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <iostream>
 #include <vector>
 #include <mpi.h>
 
