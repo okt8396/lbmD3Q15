@@ -1,4 +1,3 @@
-test
 #ifndef _LBMD2Q9_MPI_HPP_
 #define _LBMD2Q9_MPI_HPP_
 
@@ -68,14 +67,19 @@ class LbmD2Q9
         int num_ranks;
         uint32_t total_x;
         uint32_t total_y;
+	uint32_t total_z;
         uint32_t dim_x;
         uint32_t dim_y;
+	uint32_t dim_z;
         uint32_t start_x;
         uint32_t start_y;
+	uint32_t start_z;
         uint32_t num_x;
         uint32_t num_y;
+	uint32_t num_z;
         int offset_x;
         int offset_y;
+	int offset_z;
         //uint32_t *rank_local_size;
         //uint32_t *rank_local_start;
         double speed_scale;
@@ -111,11 +115,11 @@ class LbmD2Q9
         MPI_Datatype *other_bool;
 
         void setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density);
-        void getClosestFactors2(int value, int *factor_1, int *factor_2);
+        void getClosestFactors3(int value, int *factor_1, int *factor_2, int *factor_3);
         void exchangeBoundaries();
 
     public:
-        LbmD2Q9(uint32_t width, uint32_t height, double scale, int task_id, int num_tasks);
+        LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks);
         ~LbmD2Q9();
 
         void initBarrier(std::vector<Barrier*> barriers);
@@ -149,7 +153,7 @@ class LbmD2Q9
 };
 
 // constructor
-LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, double scale, int task_id, int num_tasks)
+LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks)
 {
     rank = task_id;
     num_ranks = num_tasks;
@@ -157,23 +161,28 @@ LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, double scale, int task_id, int
     stored_property = None;
 
     // split up problem space
-    int n_x, n_y, col, row, chunk_w, chunk_h, extra_w, extra_h;
+    int n_x, n_y, n_z, col, row, chunk_w, chunk_h, extra_w, extra_h, extra_d;
     int neighbor_cols, neighbor_rows;
-    getClosestFactors2(num_ranks, &n_x, &n_y);
+    getClosestFactors3(num_ranks, &n_x, &n_y, &n_z);
     chunk_w = width / n_x;
     chunk_h = height / n_y;
+    chunk_d = depth / n_z;
     extra_w = width % n_x;
     extra_h = height % n_y;
+    extra_d = depth % n_z;
     col = rank % n_x;
     row = rank / n_x;
     num_x = chunk_w + ((col < extra_w) ? 1 : 0);
     num_y = chunk_h + ((row < extra_h) ? 1 : 0);
+    num_z = chunk_d + ((depth % n_z > row) ? 1 : 0);
     offset_x = col * chunk_w + std::min(col, extra_w);
     offset_y = row * chunk_h + std::min(row, extra_h);
+    offset_z = row * chunk_d + std::min(row, extra_d);
     neighbor_cols = (num_ranks == 1) ? 0 : ((col == 0 || col == n_x-1) ? 1 : 2);
     neighbor_rows = (num_ranks == 1) ? 0 : ((row == 0 || row == n_y-1) ? 1 : 2);
     start_x = (col == 0) ? 0 : 1;
     start_y = (row == 0) ? 0 : 1;
+    start_z = (row == 0) ? 0 : 1;
     neighbors[NeighborN] = (row == n_y-1) ? -1 : rank + n_x;
     neighbors[NeighborE] = (col == n_x-1) ? -1 : rank + 1;
     neighbors[NeighborS] = (row == 0) ? -1 : rank - n_x; 
