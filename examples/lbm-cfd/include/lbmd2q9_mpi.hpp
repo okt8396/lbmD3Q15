@@ -1,3 +1,4 @@
+test
 #ifndef _LBMD2Q9_MPI_HPP_
 #define _LBMD2Q9_MPI_HPP_
 
