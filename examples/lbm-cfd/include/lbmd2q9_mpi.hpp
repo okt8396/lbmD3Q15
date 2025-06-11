@@ -165,6 +165,11 @@ class LbmD3Q15
         double* getVelocityY();
         double* getVorticity();
         double* getSpeed();
+	static constexpr int TAG_F  = 100;
+        static constexpr int TAG_D  = 101;
+        static constexpr int TAG_VX = 102;
+        static constexpr int TAG_VY = 103;
+        static constexpr int TAG_VZ = 104;
 };
 
 // constructor
@@ -227,7 +232,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     offsets[1] = 0;
     //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
     //MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
-    //offsets[1] = start_x;
+    //offsets[1] = start_x;so far in the process of making it 3D, what have i missed/need to go back and fix?
     //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
     //MPI_Type_commit(&columns_2d[LeftCol]); // left column
     //offsets[1] = start_x + num_x - 1;
@@ -249,8 +254,8 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 
     int dims[3] = {n_z, n_y, n_x};
     int periods[3] = {0, 0, 0};
-    MPI_Cart_Create(MPI_COMM_WORLD, 3, dims, periods,
-		    /*reorder=*/false, &cart_comm);
+    int reorder = 0;
+    MPI_Cart_Create(MPI_COMM_WORLD, 3, dims, periods, reorder, &cart_comm);
 
     int sizes3D[3] = {int(dim_z), int(dim_y), int(dim_x)};
 
@@ -313,7 +318,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     MPI_Type_commit(&faceNE);
 
     //Northwest
-    int subsNW[3]   = {int(num_z), int(num_y), 1};
+    int subsNW[3]   = {int(num_z), 1, 1};
     int offsNW[3]   = {int(start_z), int(dim_y - start_y - 1), int(start_x)};
     MPI_Type_create_subarray(3, sizes3D, subsNW, offsNW, MPI_ORDER_C, MPI_DOUBLE, &faceNW);
     MPI_Type_commit(&faceNW);
@@ -334,12 +339,14 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 	    return (z * dim_y + y) * dim_x + x;
     }
 
-    inline double& f_at(int d, intx, int y, int z) const {
+    inline double& f_at(int d, int x, int y, int z) const {
 	    size_t slice = static_cast<size_t>(dim_x) * dim_y * dim_z;
 	    return f[d * slice + idx3D(x,y,z)];
     }
 
-    int i, other_col, other_row;
+    int i;
+    int other_col;
+    int other_row;
     array[0] = height;
     array[1] = width;
     //rank_local_size = new uint32_t[2 * num_ranks];
@@ -547,7 +554,7 @@ void LbmD3Q15::updateFluid(double physical_speed)
 void LbmD3Q15::collide(double viscosity)
 {
 	int i, j, row, idx;
-	double omega = 1.0 / (3.0 * viscosity + 0.5) //reciprocal of relaxation time
+	double omega = 1.0 / (3.0 * viscosity + 0.5); //reciprocal of relaxation time
 	
 	for (j = 1; j < dim_y -1; j++)
 	{
