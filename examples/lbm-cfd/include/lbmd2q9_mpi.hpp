@@ -1,11 +1,13 @@
-#ifndef _LBMD2Q9_MPI_HPP_
-#define _LBMD2Q9_MPI_HPP_
+#ifndef _LBMD3Q15_MPI_HPP_
+#define _LBMD3Q15_MPI_HPP_
 
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <vector>
 #include <mpi.h>
+
 
 // Helper class for creating barriers
 class Barrier
@@ -53,8 +55,23 @@ class BarrierVertical : public Barrier
         ~BarrierVertical() {}
 };
 
+// D3Q15 discrete velocities and weights
+static const int cD3Q15[15][3] = {
+	{0,0,0}, {1,0,0}, {-1,0,0},
+	{0,1,0}, {0,-1,0}, {0,0,1},
+	{0,0,-1}, {1,1,1}, {-1,1,1},
+	{1,-1,1}, {1,1,-1}, {-1,-1,1}.
+	{-1,1,-1}, {1,-1,-1}, {-1,-1,-1}
+};
+
+static const double wD3Q15[15] = {
+	2.0/9.0,
+	1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+	1.0/72.0, 1.0/72.0, 1.0/72.0, 1.0/72.0, 1.0/72.0, 1.0/72.0, 1.0/72.0, 1.0/72.0
+};
+
 // Lattice-Boltzman Methods CFD simulation
-class LbmD2Q9
+class LbmD3Q15
 {
     public:
         enum FluidProperty {None, Density, Speed, Vorticity};
@@ -83,24 +100,12 @@ class LbmD2Q9
         //uint32_t *rank_local_size;
         //uint32_t *rank_local_start;
         double speed_scale;
-        double *f_0;
-        double *f_1;
-        double *f_2;
-        double *f_3;
-        double *f_4;
-        double *f_5;
-        double *f_6;
-        double *f_7;
-        double *f_8;
-	double *f_9;
-	double *f_10;
-	double *f_11;
-	double *f_12;
-	double *f_13;
-	double *f_14;
-	double *density;
+	static constexpr int Q = 15;
+        double *f;
+        double *density;
         double *velocity_x;
         double *velocity_y;
+	double *velocity_z;
         double *vorticity;
         double *speed;
         bool *barrier;
@@ -114,13 +119,18 @@ class LbmD2Q9
         MPI_Datatype *other_scalar;
         MPI_Datatype *other_bool;
 
+	MPI_Comm cart_comm;
+	MPI_Datatype faceXlo, faceXhi;
+	MPI_Datatype faceYlo, faceYhi;
+	MPI_Datatype faceZlo, faceZhi;
+
         void setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density);
         void getClosestFactors3(int value, int *factor_1, int *factor_2, int *factor_3);
         void exchangeBoundaries();
 
     public:
-        LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks);
-        ~LbmD2Q9();
+        LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks);
+        ~LbmD3Q15();
 
         void initBarrier(std::vector<Barrier*> barriers);
         void initFluid(double physical_speed);
@@ -153,7 +163,7 @@ class LbmD2Q9
 };
 
 // constructor
-LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks)
+LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale, int task_id, int num_tasks)
 {
     rank = task_id;
     num_ranks = num_tasks;
@@ -201,26 +211,66 @@ LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, 
     subsize[1] = 1;
     offsets[0] = start_y;
     offsets[1] = 0;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
-    MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
-    offsets[1] = start_x;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
-    MPI_Type_commit(&columns_2d[LeftCol]); // left column
-    offsets[1] = start_x + num_x - 1;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
-    MPI_Type_commit(&columns_2d[RightCol]); // right column
-    offsets[1] = block_width - 1;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
-    MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
-    // create data types for gathering data 
-    subsize[1] = num_x;
-    offsets[1] = start_x;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
-    MPI_Type_commit(&own_scalar);
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
-    MPI_Type_commit(&own_bool);
-    other_scalar = new MPI_Datatype[num_ranks];
-    other_bool = new MPI_Datatype[num_ranks];
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
+    //MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
+    //offsets[1] = start_x;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
+    //MPI_Type_commit(&columns_2d[LeftCol]); // left column
+    //offsets[1] = start_x + num_x - 1;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
+    //MPI_Type_commit(&columns_2d[RightCol]); // right column
+    //offsets[1] = block_width - 1;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
+    //MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
+    //// create data types for gathering data 
+    //subsize[1] = num_x;
+    //offsets[1] = start_x;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
+    //MPI_Type_commit(&own_scalar);
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
+    //MPI_Type_commit(&own_bool);
+    //other_scalar = new MPI_Datatype[num_ranks];
+    //other_bool = new MPI_Datatype[num_ranks];
+   
+    int sizes3D[3] = {int(dim_z), int(dim_y), int(dim_x)};
+
+    //X-Faces
+    int subsX[3]   = {int(num_z), int(num_y), 1};
+    int offsXlo[3] = {int(start_z), int(start_y), int(start_x)};
+    int offsXhi[3] = {int(start_z), int(start_y), int(dim_x - start_x - 1)};
+    MPI_Type_create_subarray(3, sizes3D, subsX, offsXlo, MPI_ORDER_C, MPI_DOUBLE, &faceXlo);
+    MPI_Type_create_subarray(3, sizes3D, subsX, offsXhi, MPI_ORDER_C, MPI_DOUBLE, &faceXhi);
+    MPI_Type_commit(&faceXlo);
+    MPI_Type_commit(&faceXhi);
+
+    //Y-Faces
+    int subsY[3]   = {int(num_z), 1 int(num_x)};
+    int offsYlo[3] = {int(start_z), int(start_y), int(start_x)};
+    int offsYhi[3] = {int(start_z), int(dim_y - start_y - 1), int(start_x)};
+    MPI_Type_create_subarray(3, sizes3D, subsY, offsYlo, MPI_ORDER_C, MPI_DOUBLE, &faceYlo);
+    MPI_Type_create_subarray(3, sizes3D, subsY, offsYhi, MPI_ORDER_C, MPI_DOUBLE, &faceYhi);
+    MPI_Type_commit(&faceYlo);
+    MPI_Type_commit(&faceYhi);
+
+    //Z-Faces
+    int subsZ[3]   = {1, int(num_y), int(num_x)};
+    int offsZlo[3] = {int(start_z), int(start_y), int(start_x)};
+    int offsXhi[3] = {int(dim_z - start_z - 1), int(start_y), int(start_x)};
+    MPI_Type_create_subarray(3, sizes3D, subsZ, offsZlo, MPI_ORDER_C, MPI_DOUBLE, &faceZlo);
+    MPI_Type_create_subarray(3, sizes3D, subsZ, offsZhi, MPI_ORDER_C, MPI_DOUBLE, &faceZhi);
+    MPI_Type_commit(&faceZlo);
+    MPI_Type_commit(&faceZhi);
+
+
+    inline int idx3D(int x, int y, int z) const {
+	    return (z * dim_y + y) * dim_x + x;
+    }
+
+    inline double& f_at(int d, intx, int y, int z) const {
+	    size_t slice = static_cast<size_t>(dim_x) * dim_y * dim_z;
+	    return f[d * slice + idx3D(x,y,z)];
+    }
+
     int i, other_col, other_row;
     array[0] = height;
     array[1] = width;
@@ -256,30 +306,42 @@ LbmD2Q9::LbmD2Q9(uint32_t width, uint32_t height, uint32_t depth, double scale, 
     uint32_t size = dim_x * dim_y;
 
     // allocate all double arrays at once
-    double *dbl_arrays = new double[14 * size];
+    double *dbl_arrays = new double[20 * size];
 
     // set array pointers
-    f_0        = dbl_arrays;
-    f_1        = dbl_arrays + (   size);
-    f_2        = dbl_arrays + ( 2*size);
-    f_3        = dbl_arrays + ( 3*size);
-    f_4        = dbl_arrays + ( 4*size);
-    f_5       = dbl_arrays + ( 5*size);
-    f_6       = dbl_arrays + ( 6*size);
-    f_7       = dbl_arrays + ( 7*size);
-    f_8       = dbl_arrays + ( 8*size);
-    density    = dbl_arrays + ( 9*size);
-    velocity_x = dbl_arrays + (10*size);
-    velocity_y = dbl_arrays + (11*size);
-    vorticity  = dbl_arrays + (12*size);
-    speed      = dbl_arrays + (13*size);
+    f_0        = dbl_arrays + (0*size);
+    f_1        = dbl_arrays + (1*size);
+    f_2        = dbl_arrays + (2*size);
+    f_3        = dbl_arrays + (3*size);
+    f_4        = dbl_arrays + (4*size);
+    f_5        = dbl_arrays + (5*size);
+    f_6        = dbl_arrays + (6*size);
+    f_7        = dbl_arrays + (7*size);
+    f_8        = dbl_arrays + (8*size);
+    f_9        = dbl_arrays + (9*size);
+    f_10       = dbl_arrays + (10*size);
+    f_11       = dbl_arrays + (11*size);
+    f_12       = dbl_arrays + (12*size);
+    f_13       = dbl_arrays + (13*size);
+    f_14       = dbl_arrays + (14*size);
+
+    std::array<double*,15> fPtr = {{
+	    f_0, f_1,f_2, f_3, f_4, f_5, f_6, f_7, f_8, f_9, f_10, f_11, f_12, f_13, f_14
+    }};
+
+    density    = dbl_arrays + (15*size);
+    velocity_x = dbl_arrays + (16*size);
+    velocity_y = dbl_arrays + (17*size);
+    velocity_z = dbl_arrays + (18*size);
+    vorticity  = dbl_arrays + (19*size);
+    speed      = dbl_arrays + (20*size);
     
     // allocate boolean array
     barrier = new bool[size];
 }
 
 // destructor
-LbmD2Q9::~LbmD2Q9()
+LbmD3Q15::~LbmD3Q15()
 {
     MPI_Type_free(&columns_2d[LeftBoundaryCol]);
     MPI_Type_free(&columns_2d[LeftCol]);
@@ -297,14 +359,14 @@ LbmD2Q9::~LbmD2Q9()
 
     //delete[] rank_local_size;
     //delete[] rank_local_start;
-    delete[] f_0;
+    delete[] f;
     delete[] barrier;
 }
 
 
 
 // initialize barrier based on selected type
-void LbmD2Q9::initBarrier(std::vector<Barrier*> barriers)
+void LbmD3Q15::initBarrier(std::vector<Barrier*> barriers)
 {
     
     // clear barrier to all `false`
@@ -341,7 +403,7 @@ void LbmD2Q9::initBarrier(std::vector<Barrier*> barriers)
 }
 
 // initialize fluid
-void LbmD2Q9::initFluid(double physical_speed)
+void LbmD3Q15::initFluid(double physical_speed)
 {
     int i, j, row;
     double speed = speed_scale * physical_speed;
@@ -356,7 +418,7 @@ void LbmD2Q9::initFluid(double physical_speed)
     }
 }
 
-void LbmD2Q9::updateFluid(double physical_speed)
+void LbmD3Q15::updateFluid(double physical_speed)
 {
     int i;
     double speed = speed_scale * physical_speed;
@@ -373,46 +435,85 @@ void LbmD2Q9::updateFluid(double physical_speed)
 }
 
 // particle collision
-void LbmD2Q9::collide(double viscosity)
+void LbmD3Q15::collide(double viscosity)
 {
-    int i, j, row, idx;
-    double omega = 1.0 / (3.0 * viscosity + 0.5); // reciprocal of relaxation time
-    for (j = 1; j < dim_y - 1; j++)
-    {
-        row = j * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            idx = row + i;
-            density[idx] = f_0[idx] + f_1[idx] + f_3[idx] + f_2[idx] + f_4[idx] + f_6[idx] + f_5[idx] + f_8[idx] + f_7[idx];
-            velocity_x[idx] = (f_2[idx] + f_5[idx] + f_7[idx] - f_4[idx] - f_6[idx] - f_8[idx]) / density[idx];
-            velocity_y[idx] = (f_1[idx] + f_5[idx] + f_6[idx] - f_3[idx] - f_7[idx] - f_8[idx]) / density[idx];
-            double one_ninth_density       = (1.0 /  9.0) * density[idx];
-            double four_ninths_density     = (4.0 /  9.0) * density[idx];
-            double one_thirtysixth_density = (1.0 / 36.0) * density[idx];
-            double velocity_3x   = 3.0 * velocity_x[idx];
-            double velocity_3y   = 3.0 * velocity_y[idx];
-            double velocity_x2   = velocity_x[idx] * velocity_x[idx];
-            double velocity_y2   = velocity_y[idx] * velocity_y[idx];
-            double velocity_2xy  = 2.0 * velocity_x[idx] * velocity_y[idx];
-            double vecocity_2    = velocity_x2 + velocity_y2;
-            double vecocity_2_15 = 1.5 * vecocity_2;
-            f_0[idx]  += omega * (four_ninths_density     * (1                                                                 - vecocity_2_15) - f_0[idx]);
-            f_2[idx]  += omega * (one_ninth_density       * (1 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_2[idx]);
-            f_4[idx]  += omega * (one_ninth_density       * (1 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_4[idx]);
-            f_1[idx]  += omega * (one_ninth_density       * (1 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_1[idx]);
-            f_3[idx]  += omega * (one_ninth_density       * (1 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_3[idx]);
-            f_5[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_5[idx]);
-            f_7[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_7[idx]);
-            f_6[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_6[idx]);
-            f_8[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_8[idx]);
-        }
-    }
+	int i, j, row, idx;
+	double omega = 1.0 / (3.0 * viscosity + 0.5) //reciprocal of relaxation time
+	
+	for (j = 1; j < dim_y -1; j++)
+	{
+		row = j * dim_x
+		for (i = 1; i < dim_x - 1; ++i)
+		{
+			idx = row + i;
 
-    exchangeBoundaries();
+			double rho = 0.0, ux = 0.0, uy = 0.0, uz = 0.0;
+			for (int d = 0; d < 15; ++d)
+			{
+				double fv = fPtr[d][idx];
+				rho += fv;
+				ux  += fv * cD3Q15[d][0];
+				uy  += fv * cD3Q15[d][1];
+				uz  += fv * cD3Q15[d][2];
+			}
+			density[idx] = rho;
+			ux /= rho; uy /= rho; uz /= rho;
+			velocity_x[idx] = ux;
+			velocity_y[idx] = uy;
+			velocity_z[idx] = uz;
+
+			double usqr = ux*ux + uy*uy + uz*uz;
+			for (int d = 0; d < 15; ++d)
+			{
+				double cu = 3.0 * (cD3Q15[d][0]*ux + cD3Q15[d][1]*uy + cD3Q15[d][2]*uz);
+				double feq = wD3Q15[d] * rho * (1.0 + cu + 0.5*cu*cu - 1.5*usqr);
+				fPtr[d][idx] += omega * (feq - fPtr[d][idx]);
+			}
+		}
+	}
+
+	exchangeBoundaries();
 }
+	
+//{
+//    int i, j, row, idx;
+//    double omega = 1.0 / (3.0 * viscosity + 0.5); // reciprocal of relaxation time
+//    for (j = 1; j < dim_y - 1; j++)
+//    {
+//        row = j * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            idx = row + i;
+//            density[idx] = f_0[idx] + f_1[idx] + f_3[idx] + f_2[idx] + f_4[idx] + f_6[idx] + f_5[idx] + f_8[idx] + f_7[idx];
+//            velocity_x[idx] = (f_2[idx] + f_5[idx] + f_7[idx] - f_4[idx] - f_6[idx] - f_8[idx]) / density[idx];
+//            velocity_y[idx] = (f_1[idx] + f_5[idx] + f_6[idx] - f_3[idx] - f_7[idx] - f_8[idx]) / density[idx];
+//            double one_ninth_density       = (1.0 /  9.0) * density[idx];
+//            double four_ninths_density     = (4.0 /  9.0) * density[idx];
+//            double one_thirtysixth_density = (1.0 / 36.0) * density[idx];
+//            double velocity_3x   = 3.0 * velocity_x[idx];
+//            double velocity_3y   = 3.0 * velocity_y[idx];
+//            double velocity_x2   = velocity_x[idx] * velocity_x[idx];
+//            double velocity_y2   = velocity_y[idx] * velocity_y[idx];
+//            double velocity_2xy  = 2.0 * velocity_x[idx] * velocity_y[idx];
+//            double vecocity_2    = velocity_x2 + velocity_y2;
+//            double vecocity_2_15 = 1.5 * vecocity_2;
+//            f_0[idx]  += omega * (four_ninths_density     * (1                                                                 - vecocity_2_15) - f_0[idx]);
+//            f_2[idx]  += omega * (one_ninth_density       * (1 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_2[idx]);
+//            f_4[idx]  += omega * (one_ninth_density       * (1 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15) - f_4[idx]);
+//            f_1[idx]  += omega * (one_ninth_density       * (1 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_1[idx]);
+//            f_3[idx]  += omega * (one_ninth_density       * (1 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15) - f_3[idx]);
+//            f_5[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_5[idx]);
+//            f_7[idx] += omega * (one_thirtysixth_density * (1 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_7[idx]);
+//            f_6[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15) - f_6[idx]);
+//            f_8[idx] += omega * (one_thirtysixth_density * (1 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15) - f_8[idx]);
+//        }
+//    }
+//
+//    exchangeBoundaries();
+//}
 
 // particle streaming
-void LbmD2Q9::stream()
+void LbmD3Q15::stream()
 {
     int i, j, row, rowp, rown, idx;
     for (j = dim_y - 2; j > 0; j--) // first start in NW corner...
@@ -460,7 +561,7 @@ void LbmD2Q9::stream()
 }
 
 // particle streaming bouncing back off of barriers
-void LbmD2Q9::bounceBackStream()
+void LbmD3Q15::bounceBackStream()
 {
     int i, j, row, rowp, rown, idx;
     for (j = 1; j < dim_y - 1; j++) // handle bounce-back from barriers
@@ -508,7 +609,7 @@ void LbmD2Q9::bounceBackStream()
 }
 
 // check if simulation has become unstable (if so, more time steps are required)
-bool LbmD2Q9::checkStability()
+bool LbmD3Q15::checkStability()
 {
     int i, idx;
     bool stable = true;
@@ -525,7 +626,7 @@ bool LbmD2Q9::checkStability()
 }
 
 // compute speed (magnitude of velocity vector)
-void LbmD2Q9::computeSpeed()
+void LbmD3Q15::computeSpeed()
 {
     int i, j, row;
     for (j = 1; j < dim_y - 1; j++)
@@ -539,7 +640,7 @@ void LbmD2Q9::computeSpeed()
 }
 
 // compute vorticity (rotational velocity)
-void LbmD2Q9::computeVorticity()
+void LbmD3Q15::computeVorticity()
 {
     int i, j, row, rowp, rown;
     for (j = 1; j < dim_y - 1; j++)
@@ -555,7 +656,7 @@ void LbmD2Q9::computeVorticity()
 }
 
 // gather all data on rank 0
-void LbmD2Q9::gatherDataOnRank0(FluidProperty property)
+void LbmD3Q15::gatherDataOnRank0(FluidProperty property)
 {
     double *send_buf = NULL;
     bool *bsend_buf = barrier;
@@ -597,79 +698,79 @@ void LbmD2Q9::gatherDataOnRank0(FluidProperty property)
 }
 
 // get width of sub-area this task owns (including ghost cells)
-uint32_t LbmD2Q9::getDimX()
+uint32_t LbmD3Q15::getDimX()
 {
     return dim_x;
 }
 
 // get width of sub-area this task owns (including ghost cells)
-uint32_t LbmD2Q9::getDimY()
+uint32_t LbmD3Q15::getDimY()
 {
     return dim_y;
 }
 
 // get width of total area of simulation
-uint32_t LbmD2Q9::getTotalDimX()
+uint32_t LbmD3Q15::getTotalDimX()
 {
     return total_x;
 }
 
 // get width of total area of simulation
-uint32_t LbmD2Q9::getTotalDimY()
+uint32_t LbmD3Q15::getTotalDimY()
 {
     return total_y;
 }
 
 // get x offset into overall domain where this sub-area esxists
-uint32_t LbmD2Q9::getOffsetX()
+uint32_t LbmD3Q15::getOffsetX()
 {
     return offset_x;
 }
 
 // get y offset into overall domain where this sub-area esxists
-uint32_t LbmD2Q9::getOffsetY()
+uint32_t LbmD3Q15::getOffsetY()
 {
     return offset_y;
 }
 
 // get x start for valid data (0 if no ghost cell on left, 1 if there is a ghost cell on left)
-uint32_t LbmD2Q9::getStartX()
+uint32_t LbmD3Q15::getStartX()
 {
     return start_x;
 }
 
 // get y start for valid data (0 if no ghost cell on top, 1 if there is a ghost cell on top)
-uint32_t LbmD2Q9::getStartY()
+uint32_t LbmD3Q15::getStartY()
 {
     return start_y;
 }
 
 // get width of sub-area this task is responsible for (excluding ghost cells)
-uint32_t LbmD2Q9::getSizeX()
+uint32_t LbmD3Q15::getSizeX()
 {
     return num_x;
 }
 
 // get width of sub-area this task is responsible for (excluding ghost cells)
-uint32_t LbmD2Q9::getSizeY()
+uint32_t LbmD3Q15::getSizeY()
 {
     return num_y;
 }
 
 // get the local width and height of a particular rank's data
-//uint32_t* LbmD2Q9::getRankLocalSize(int rank)
+//uint32_t* LbmD3Q15::getRankLocalSize(int rank)
 //{
 //    return rank_local_size + (2 * rank);
 //}
 
 // get the local x and y start of a particular rank's data
-//uint32_t* LbmD2Q9::getRankLocalStart(int rank)
+//uint32_t* LbmD3Q15::getRankLocalStart(int rank)
 //{
 //    return rank_local_start + (2 * rank);
 //}
 
 // get barrier array
-bool* LbmD2Q9::getBarrier()
+bool* LbmD3Q15::getBarrier()
 {
     if (rank != 0) return NULL;
     return brecv_buf;
@@ -677,31 +778,31 @@ bool* LbmD2Q9::getBarrier()
 
 
 // get density array
-double* LbmD2Q9::getDensity()
+double* LbmD3Q15::getDensity()
 {
     return density;
 }
 
 // get velocity x array
-double* LbmD2Q9::getVelocityX()
+double* LbmD3Q15::getVelocityX()
 {
     return velocity_x;
 }
 
 // get density array
-double* LbmD2Q9::getVelocityY()
+double* LbmD3Q15::getVelocityY()
 {
     return velocity_y;
 }
 
 // get vorticity array
-double* LbmD2Q9::getVorticity()
+double* LbmD3Q15::getVorticity()
 {
     return vorticity;
 }
 
 // get vorticity array
-double* LbmD2Q9::getSpeed()
+double* LbmD3Q15::getSpeed()
 {
     return speed;
 }
@@ -709,21 +810,21 @@ double* LbmD2Q9::getSpeed()
 
 /*
 // get density array
-double* LbmD2Q9::getDensity()
+double* LbmD3Q15::getDensity()
 {
     if (rank != 0 || stored_property != Density) return NULL;
     return recv_buf;
 }
 
 // get vorticity array
-double* LbmD2Q9::getVorticity()
+double* LbmD3Q15::getVorticity()
 {
     if (rank != 0 || stored_property != Vorticity) return NULL;
     return recv_buf;
 }
 
 // get speed array
-double* LbmD2Q9::getSpeed()
+double* LbmD3Q15::getSpeed()
 {
     if (rank != 0 || stored_property != Speed) return NULL;
     return recv_buf;
@@ -731,7 +832,7 @@ double* LbmD2Q9::getSpeed()
 */
 
 // private - set fluid equalibrium
-void LbmD2Q9::setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density)
+void LbmD3Q15::setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density)
 {
     int idx = y * dim_x + x;
 
@@ -761,7 +862,7 @@ void LbmD2Q9::setEquilibrium(int x, int y, double new_velocity_x, double new_vel
 }
 
 // private - get 2 factors of a given number that are closest to each other
-void LbmD2Q9::getClosestFactors2(int value, int *factor_1, int *factor_2)
+void LbmD3Q15::getClosestFactors2(int value, int *factor_1, int *factor_2)
 {
     int test_num = (int)sqrt(value);
     while (value % test_num != 0)
@@ -773,7 +874,7 @@ void LbmD2Q9::getClosestFactors2(int value, int *factor_1, int *factor_2)
 }
 
 // private - exchange boundary information between MPI ranks
-void LbmD2Q9::exchangeBoundaries()
+void LbmD3Q15::exchangeBoundaries()
 {
     MPI_Status status;
     int nx = dim_x;
@@ -841,7 +942,14 @@ void LbmD2Q9::exchangeBoundaries()
         MPI_Sendrecv(f_8,       1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, f_8,       1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(density,    1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, density,    1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
         MPI_Sendrecv(velocity_x, 1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, velocity_x, 1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(velocity_y, 1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, velocity_y, 1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
+//X-Faces
+    int subsX[3]   = {int(num_z), int(num_y), 1};
+    int offsXlo[3] = {int(start_z), int(start_y), int(start_x)};
+    int offsXhi[3] = {int(start_z), int(start_y), int(dim_x - start_x - 1)};
+    MPI_Type_create_subarray(3, sizes3D, subsX, offsXlo, MPI_ORDER_C, MPI_DOUBLE, &faceXlo);
+    MPI_Type_create_subarray(3, sizes3D, subsX, offsXhi, MPI_ORDER_C, MPI_DOUBLE, &faceXhi);
+    MPI_Type_commit(&faceXlo);
+    MPI_Type_commit(&faceXhi);        MPI_Sendrecv(velocity_y, 1, columns_2d[LeftCol], neighbors[NeighborW], NeighborE, velocity_y, 1, columns_2d[LeftBoundaryCol], neighbors[NeighborW], NeighborW, MPI_COMM_WORLD, &status);
     }
     if (neighbors[NeighborNE] >= 0)
     {
@@ -906,4 +1014,4 @@ void LbmD2Q9::exchangeBoundaries()
 }
 
 
-#endif // _LBMD2Q9_MPI_HPP_
+#endif // _LBMD3Q15_MPI_HPP_
