@@ -196,12 +196,12 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     num_z = chunk_d + ((depth % n_z > row) ? 1 : 0);
     offset_x = col * chunk_w + std::min(col, extra_w);
     offset_y = row * chunk_h + std::min(row, extra_h);
-    offset_z = row * chunk_d + std::min(row, extra_d);
+    offset_z = layer * chunk_d + std::min(layer, extra_d);
     neighbor_cols = (num_ranks == 1) ? 0 : ((col == 0 || col == n_x-1) ? 1 : 2);
     neighbor_rows = (num_ranks == 1) ? 0 : ((row == 0 || row == n_y-1) ? 1 : 2);
     start_x = (col == 0) ? 0 : 1;
     start_y = (row == 0) ? 0 : 1;
-    start_z = (row == 0) ? 0 : 1;
+    start_z = (layer == 0) ? 0 : 1;
     neighbors[NeighborN] = (row == n_y-1) ? MPI_PROC_NULL : rank + n_x;
     neighbors[NeighborE] = (col == n_x-1) ? MPI_PROC_NULL : rank + 1;
     neighbors[NeighborS] = (row == 0) ? MPI_PROC_NULL : rank - n_x; 
@@ -246,6 +246,12 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     //other_scalar = new MPI_Datatype[num_ranks];
     //other_bool = new MPI_Datatype[num_ranks];
    
+
+    int dims[3] = {n_z, n_y, n_x};
+    int periods[3] = {0, 0, 0};
+    MPI_Cart_Create(MPI_COMM_WORLD, 3, dims, periods,
+		    /*reorder=*/false, &cart_comm);
+
     int sizes3D[3] = {int(dim_z), int(dim_y), int(dim_x)};
 
     //X-Faces
@@ -258,7 +264,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     MPI_Type_commit(&faceXhi);
 
     //Y-Faces
-    int subsY[3]   = {int(num_z), 1 int(num_x)};
+    int subsY[3]   = {int(num_z), 1, int(num_x)};
     int offsYlo[3] = {int(start_z), int(start_y), int(start_x)};
     int offsYhi[3] = {int(start_z), int(dim_y - start_y - 1), int(start_x)};
     MPI_Type_create_subarray(3, sizes3D, subsY, offsYlo, MPI_ORDER_C, MPI_DOUBLE, &faceYlo);
@@ -269,7 +275,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     //Z-Faces
     int subsZ[3]   = {1, int(num_y), int(num_x)};
     int offsZlo[3] = {int(start_z), int(start_y), int(start_x)};
-    int offsXhi[3] = {int(dim_z - start_z - 1), int(start_y), int(start_x)};
+    int offsZhi[3] = {int(dim_z - start_z - 1), int(start_y), int(start_x)};
     MPI_Type_create_subarray(3, sizes3D, subsZ, offsZlo, MPI_ORDER_C, MPI_DOUBLE, &faceZlo);
     MPI_Type_create_subarray(3, sizes3D, subsZ, offsZhi, MPI_ORDER_C, MPI_DOUBLE, &faceZhi);
     MPI_Type_commit(&faceZlo);
@@ -430,39 +436,80 @@ LbmD3Q15::~LbmD3Q15()
 // initialize barrier based on selected type
 void LbmD3Q15::initBarrier(std::vector<Barrier*> barriers)
 {
-    
-    // clear barrier to all `false`
-    memset(barrier, 0, dim_x * dim_y);
-    
-    // set barrier to `true` where horizontal or vertical barriers exist
-    int sx = (offset_x == 0) ? 0 : offset_x - 1;
-    int sy = (offset_y == 0) ? 0 : offset_y - 1;
-    int i, j;
-    for (i = 0; i < barriers.size(); i++) {
-        if (barriers[i]->getType() == Barrier::Type::HORIZONTAL) {
-            int y = barriers[i]->getY1() - sy;
-            if (y >= 0 && y < dim_y) {
-                for (j = barriers[i]->getX1(); j <= barriers[i]->getX2(); j++) {
-                    int x = j - sx;
+	// clear barrier to all `false`
+	memset(barrier, 0, dim_x * dim_y * dim_z);
+
+	// set barrier to `true` where horizontal or vertical barriers exist
+	int sx = (offset_x == 0) ? 0 : offset_x - 1;
+	int sy = (offset_y == 0) ? 0 : offset_y - 1;
+	int sz = (offset_z == 0) ? 0 : offset_z - 1;
+	int i, j;
+        for (i = 0; i < barriers.size(); i++) {
+          if (barriers[i]->getType() == Barrier::Type::HORIZONTAL) {
+              int y = barriers[i]->getY1() - sy;
+              if (y >= 0 && y < dim_y) {
+                  for (j = barriers[i]->getX1(); j <= barriers[i]->getX2(); j++) {
+                      int x = j - sx;
                     if (x >= 0 && x < dim_x) {
-                        barrier[y * dim_x + x] = true;
-                    }
-                }
-            }
-        }
-        else {                // Barrier::VERTICAL
-            int x = barriers[i]->getX1() - sx;
-            if (x >= 0 && x < dim_x) {
-                for (j = barriers[i]->getY1(); j <= barriers[i]->getY2(); j++) {
-                    int y = j - sy;
-                    if (y >= 0 && y < dim_y) {
-                        barrier[y * dim_x + x] = true;
-                    }
-                }
-            }
-        }
-    }
+			for (int k = sz; k < dim_z - sz; ++k) {
+			    barrier[idx3D(x,y,k)] = true;
+			}
+		    }
+		  }
+	      }
+	  }
+	  else {                // Barrier::VERTICAL
+              int x = barriers[i]->getX1() - sx;
+              if (x >= 0 && x < dim_x) {
+                  for (j = barriers[i]->getY1(); j <= barriers[i]->getY2(); j++) {
+                      int y = j - sy;
+                      if (y >= 0 && y < dim_y) {
+		    	  // extrude vertical line through every Z-layer
+			  for (int k = sz; k < dim_z - sz; ++k) {
+		    	      barrier[idx3D(x,y,k)] = true;
+			  }
+		      }
+		  }
+	      }
+	  }
+	}
 }
+
+	
+//{
+//    
+//    // clear barrier to all `false`
+//    memset(barrier, 0, dim_x * dim_y);
+//    
+//    // set barrier to `true` where horizontal or vertical barriers exist
+//    int sx = (offset_x == 0) ? 0 : offset_x - 1;
+//    int sy = (offset_y == 0) ? 0 : offset_y - 1;
+//    int i, j;
+//    for (i = 0; i < barriers.size(); i++) {
+//        if (barriers[i]->getType() == Barrier::Type::HORIZONTAL) {
+//            int y = barriers[i]->getY1() - sy;
+//            if (y >= 0 && y < dim_y) {
+//                for (j = barriers[i]->getX1(); j <= barriers[i]->getX2(); j++) {
+//                    int x = j - sx;
+//                    if (x >= 0 && x < dim_x) {
+//                        barrier[y * dim_x + x] = true;
+//                    }
+//                }
+//            }
+//        }
+//        else {                // Barrier::VERTICAL
+//            int x = barriers[i]->getX1() - sx;
+//            if (x >= 0 && x < dim_x) {
+//                for (j = barriers[i]->getY1(); j <= barriers[i]->getY2(); j++) {
+//                    int y = j - sy;
+//                    if (y >= 0 && y < dim_y) {
+//                        barrier[y * dim_x + x] = true;
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}
 
 // initialize fluid
 void LbmD3Q15::initFluid(double physical_speed)
@@ -577,50 +624,74 @@ void LbmD3Q15::collide(double viscosity)
 // particle streaming
 void LbmD3Q15::stream()
 {
-    int i, j, row, rowp, rown, idx;
-    for (j = dim_y - 2; j > 0; j--) // first start in NW corner...
-    {
-        row = j * dim_x;
-        rowp = (j - 1) * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            f_1[row + i] =  f_1[rowp + i];
-            f_6[row + i] = f_6[rowp + i + 1];
-        }
-    }
-    for (j = dim_y - 2; j > 0; j--) // then start in NE corner...
-    {
-        row = j * dim_x;
-        rowp = (j - 1) * dim_x;
-        for (i = dim_x - 2; i > 0; i--)
-        {
-            f_2[row + i] =  f_2[row + i - 1];
-            f_5[row + i] = f_5[rowp + i - 1];
-        }
-    }
-    for (j = 1; j < dim_y - 1; j++) // then start in SE corner...
-    {
-        row = j * dim_x;
-        rown = (j + 1) * dim_x;
-        for (i = dim_x - 2; i > 0; i--)
-        {
-            f_3[row + i] =  f_3[rown + i];
-            f_7[row + i] = f_7[rown + i - 1];
-        }
-    }
-    for (j = 1; j < dim_y - 1; j++) // then start in the SW corner...
-    {
-        row = j * dim_x;
-        rown = (j + 1) * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            f_4[row + i] =  f_4[row + i + 1];
-            f_8[row + i] = f_8[rown + i + 1];
-        }
-    }
+	size_t slice = static_cast<size_t>(dim_x) * dim_y * dim_z;
+	double* f_Old = new double[15 * slice];
+	std::memcpy(f_Old, f, 15 * slice * sizeof(double));
 
-    exchangeBoundaries();
-}
+	for (int k = start_z; k < dim_z - start_z; ++k) {
+		for (int j = start_y; j < dim_y - start_y; ++j) {
+			for (int i = start_x; i < dim_x - start_x; ++i) {
+				int idx = idx3D(i, j, k);
+				for (int d = 0; d < 15; ++d) {
+					int ni = i + cD3Q15[d][0];
+					int nj = j + cD3Q15[d][1];
+					int nk = k + cD3Q15[d][2];
+					int nidx = idx3D(ni, nj, nk);
+
+					f_at(d, ni, nj, nk) = f_Old[d * slice + idx];
+				}
+			}
+		}
+	}
+
+	delete[] f_Old;
+	exchangeBoundaries();
+	
+//{
+//    int i, j, row, rowp, rown, idx;
+//    for (j = dim_y - 2; j > 0; j--) // first start in NW corner...
+//    {
+//        row = j * dim_x;
+//        rowp = (j - 1) * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            f_1[row + i] =  f_1[rowp + i];
+//            f_6[row + i] = f_6[rowp + i + 1];
+//        }
+//    }
+//    for (j = dim_y - 2; j > 0; j--) // then start in NE corner...
+//    {
+//        row = j * dim_x;
+//        rowp = (j - 1) * dim_x;
+//        for (i = dim_x - 2; i > 0; i--)
+//        {
+//            f_2[row + i] =  f_2[row + i - 1];
+//            f_5[row + i] = f_5[rowp + i - 1];
+//        }
+//    }
+//    for (j = 1; j < dim_y - 1; j++) // then start in SE corner...
+//    {
+//        row = j * dim_x;
+//        rown = (j + 1) * dim_x;
+//        for (i = dim_x - 2; i > 0; i--)
+//        {
+//            f_3[row + i] =  f_3[rown + i];
+//            f_7[row + i] = f_7[rown + i - 1];
+//        }
+//    }
+//    for (j = 1; j < dim_y - 1; j++) // then start in the SW corner...
+//    {
+//        row = j * dim_x;
+//        rown = (j + 1) * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            f_4[row + i] =  f_4[row + i + 1];
+//            f_8[row + i] = f_8[rown + i + 1];
+//        }
+//    }
+//
+//    exchangeBoundaries();
+//}
 
 // particle streaming bouncing back off of barriers
 void LbmD3Q15::bounceBackStream()
