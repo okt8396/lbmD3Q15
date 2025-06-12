@@ -60,7 +60,7 @@ static const int cD3Q15[15][3] = {
 	{0,0,0}, {1,0,0}, {-1,0,0},
 	{0,1,0}, {0,-1,0}, {0,0,1},
 	{0,0,-1}, {1,1,1}, {-1,1,1},
-	{1,-1,1}, {1,1,-1}, {-1,-1,1}.
+	{1,-1,1}, {1,1,-1}, {-1,-1,1},
 	{-1,1,-1}, {1,-1,-1}, {-1,-1,-1}
 };
 
@@ -187,7 +187,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     stored_property = None;
 
     // split up problem space
-    int n_x, n_y, n_z, col, row, chunk_w, chunk_h, extra_w, extra_h, extra_d;
+    int n_x, n_y, n_z, col, row, layer, chunk_w, chunk_h, chunk_d, extra_w, extra_h, extra_d;
     int neighbor_cols, neighbor_rows;
     getClosestFactors3(num_ranks, &n_x, &n_y, &n_z);
     chunk_w = width / n_x;
@@ -204,10 +204,10 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 
     num_x = chunk_w + ((col < extra_w) ? 1 : 0);
     num_y = chunk_h + ((row < extra_h) ? 1 : 0);
-    num_z = chunk_d + ((depth % n_z > row) ? 1 : 0);
-    offset_x = col * chunk_w + std::min(col, extra_w);
-    offset_y = row * chunk_h + std::min(row, extra_h);
-    offset_z = layer * chunk_d + std::min(layer, extra_d);
+    num_z = chunk_d + ((layer < extra_d) ? 1 : 0);
+    offset_x = col * chunk_w + std::min<int>(col, extra_w);
+    offset_y = row * chunk_h + std::min<int>(row, extra_h);
+    offset_z = layer * chunk_d + std::min<int>(layer, extra_d);
     neighbor_cols = (num_ranks == 1) ? 0 : ((col == 0 || col == n_x-1) ? 1 : 2);
     neighbor_rows = (num_ranks == 1) ? 0 : ((row == 0 || row == n_y-1) ? 1 : 2);
     start_x = (col == 0) ? 0 : 1;
@@ -236,27 +236,51 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     subsize[1] = 1;
     offsets[0] = start_y;
     offsets[1] = 0;
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
-    //MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
-    //offsets[1] = start_x;so far in the process of making it 3D, what have i missed/need to go back and fix?
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
-    //MPI_Type_commit(&columns_2d[LeftCol]); // left column
-    //offsets[1] = start_x + num_x - 1;
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
-    //MPI_Type_commit(&columns_2d[RightCol]); // right column
-    //offsets[1] = block_width - 1;
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
-    //MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
-    //// create data types for gathering data 
-    //subsize[1] = num_x;
-    //offsets[1] = start_x;
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
-    //MPI_Type_commit(&own_scalar);
-    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
-    //MPI_Type_commit(&own_bool);
-    //other_scalar = new MPI_Datatype[num_ranks];
-    //other_bool = new MPI_Datatype[num_ranks];
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
+    MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
+    offsets[1] = start_x;
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
+    MPI_Type_commit(&columns_2d[LeftCol]); // left column
+    offsets[1] = start_x + num_x - 1;
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
+    MPI_Type_commit(&columns_2d[RightCol]); // right column
+    offsets[1] = block_width - 1;
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
+    MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
+    // create data types for gathering data 
+    subsize[1] = num_x;
+    offsets[1] = start_x;
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
+    MPI_Type_commit(&own_scalar);
+    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
+    MPI_Type_commit(&own_bool);
+    other_scalar = new MPI_Datatype[num_ranks];
+    other_bool = new MPI_Datatype[num_ranks];
    
+    int i;
+    int other_col;
+    int other_row;
+    array[0] = height;
+    array[1] = width;
+    //rank_local_size = new uint32_t[2 * num_ranks];
+    //rank_local_start = new uint32_t[2 * num_ranks];
+    for (i=0; i<num_ranks; i++)
+    {
+        other_col = i % n_x;
+        other_row = i / n_x;
+        subsize[0] = chunk_h + ((other_row < extra_h) ? 1 : 0);
+        subsize[1] = chunk_w + ((other_col < extra_w) ? 1 : 0);
+        offsets[0] = other_row * chunk_h + std::min(other_row, extra_h);
+        offsets[1] = other_col * chunk_w + std::min(other_col, extra_w);
+        //rank_local_size[2 * i + 0] = subsize[1];
+        //rank_local_size[2 * i + 1] = subsize[0];
+        //rank_local_start[2 * i + 0] = (other_col == 0) ? 0 : 1;
+        //rank_local_start[2 * i + 1] = (other_row == 0) ? 0 : 1;
+        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &other_scalar[i]);
+        MPI_Type_commit(&other_scalar[i]);
+        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &other_bool[i]);
+        MPI_Type_commit(&other_bool[i]);
+    }
 
     int dims[3] = {n_z, n_y, n_x};
     int periods[3] = {0, 0, 0};
@@ -350,41 +374,18 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 	    return f[d * slice + idx3D(x,y,z)];
     }
 
-    int i;
-    int other_col;
-    int other_row;
-    array[0] = height;
-    array[1] = width;
-    //rank_local_size = new uint32_t[2 * num_ranks];
-    //rank_local_start = new uint32_t[2 * num_ranks];
-    for (i=0; i<num_ranks; i++)
-    {
-        other_col = i % n_x;
-        other_row = i / n_x;
-        subsize[0] = chunk_h + ((other_row < extra_h) ? 1 : 0);
-        subsize[1] = chunk_w + ((other_col < extra_w) ? 1 : 0);
-        offsets[0] = other_row * chunk_h + std::min(other_row, extra_h);
-        offsets[1] = other_col * chunk_w + std::min(other_col, extra_w);
-        //rank_local_size[2 * i + 0] = subsize[1];
-        //rank_local_size[2 * i + 1] = subsize[0];
-        //rank_local_start[2 * i + 0] = (other_col == 0) ? 0 : 1;
-        //rank_local_start[2 * i + 1] = (other_row == 0) ? 0 : 1;
-        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &other_scalar[i]);
-        MPI_Type_commit(&other_scalar[i]);
-        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &other_bool[i]);
-        MPI_Type_commit(&other_bool[i]);
-    }
-
     // set up sub grid for simulation
     total_x = width;
     total_y = height;
+    total_z = depth;
     dim_x = block_width;
     dim_y = block_height;
+    dim_z = block_depth;
     
-    recv_buf = new double[total_x * total_y];
-    brecv_buf = new bool[total_x * total_y];
+    recv_buf = new double[total_x * total_y * total_z];
+    brecv_buf = new bool[total_x * total_y * total_z];
     
-    uint32_t size = dim_x * dim_y;
+    uint32_t size = dim_x * dim_y * dim_z;
 
     // allocate all double arrays at once
     double *dbl_arrays = new double[20 * size];
@@ -615,7 +616,7 @@ void LbmD3Q15::collide(double viscosity)
 	
 	for (j = 1; j < dim_y -1; j++)
 	{
-		row = j * dim_x
+		row = j * dim_x;
 		for (i = 1; i < dim_x - 1; ++i)
 		{
 			idx = row + i;
@@ -894,7 +895,7 @@ void LbmD3Q15::computeSpeed()
             for (i = 1; i < dim_x - 1; i++)
             {
 		idx = idx3D(i, j, k);
-		speed[idx] = sqrt(velocity[idx] * velocity_x[idx] + velocity_y[idx] * velocity_y[idx] + velocity_z[idx] * velocity_z[idx]);
+		speed[idx] = sqrt(velocity_x[idx] * velocity_x[idx] + velocity_y[idx] * velocity_y[idx] + velocity_z[idx] * velocity_z[idx]);
 	    }
 	}
     }
@@ -917,16 +918,25 @@ void LbmD3Q15::computeSpeed()
 // compute vorticity (rotational velocity)
 void LbmD3Q15::computeVorticity()
 {
-    int i, j, row, rowp, rown;
-    for (j = 1; j < dim_y - 1; j++)
+    int i; int j; int k; int idx;
+
+    for (k = 1; k < dim_z - 1; k++)
     {
-        row = j * dim_x;
-        rowp = (j - 1) * dim_x;
-        rown = (j + 1) * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            vorticity[row + i] = velocity_y[row + i + 1] - velocity_y[row + i - 1] - velocity_x[rown + i] + velocity_x[rowp + i];
-        }
+	for (j = 1; j < dim_y -1; j++)
+	{
+	    for (i = 1; i < dim_x - 1; i++)
+	    {
+		idx = idx3D(i, j, k);
+
+		double wx = (velocity_z[idx3D(i, j + 1, k)] - velocity_z[idx3D(i, j - 1, k)]) - (velocity_y[idx3D(i, j, k + 1)] - velocity_y[idx3D(i, j, k - 1)]);
+
+		double wy = (velocity_z[idx3D(i, j, k + 1)] - velocity_z[idx3D(i, j, k - 1)]) - (velocity_y[idx3D(i + 1, j, k)] - velocity_y[idx3D(i - 1, j, k)]);
+
+		double wz = (velocity_z[idx3D(i + 1, j, k)] - velocity_z[idx3D(i - 1, j, k)]) - (velocity_y[idx3D(i, j + 1, k)] - velocity_y[idx3D(i, j - 1, k)]);
+
+		vorticity[idx] = sqrt(wx*wx + wy*wy + wz*wz);
+	    }
+	}
     }
 }
 
