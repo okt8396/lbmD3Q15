@@ -176,6 +176,7 @@ class LbmD3Q15
         static constexpr int TAG_VX = 102;
         static constexpr int TAG_VY = 103;
         static constexpr int TAG_VZ = 104;
+	static constexpr int TAB_B  = 105;
 };
 
 // constructor
@@ -226,68 +227,102 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     neighbors[NeighborUp] = (layer == n_z-1) ? MPI_PROC_NULL : rank + (n_x * n_y);
     neighbors[NeighborDown] = (layer == 0) ? MPI_PROC_NULL : rank - (n_x * n_y);
     
-    // create data types for exchanging data with neighbors
-    int block_width, block_height, array[2], subsize[2], offsets[2];
-    block_width = num_x + neighbor_cols;
-    block_height = num_y + neighbor_rows;
-    array[0] = block_height;
-    array[1] = block_width;
-    subsize[0] = num_y;
-    subsize[1] = 1;
-    offsets[0] = start_y;
-    offsets[1] = 0;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
-    MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
-    offsets[1] = start_x;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
-    MPI_Type_commit(&columns_2d[LeftCol]); // left column
-    offsets[1] = start_x + num_x - 1;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
-    MPI_Type_commit(&columns_2d[RightCol]); // right column
-    offsets[1] = block_width - 1;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
-    MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
-    // create data types for gathering data 
-    subsize[1] = num_x;
-    offsets[1] = start_x;
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
-    MPI_Type_commit(&own_scalar);
-    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
-    MPI_Type_commit(&own_bool);
-    other_scalar = new MPI_Datatype[num_ranks];
-    other_bool = new MPI_Datatype[num_ranks];
-   
-    int i;
-    int other_col;
-    int other_row;
-    array[0] = height;
-    array[1] = width;
-    //rank_local_size = new uint32_t[2 * num_ranks];
-    //rank_local_start = new uint32_t[2 * num_ranks];
-    for (i=0; i<num_ranks; i++)
-    {
-        other_col = i % n_x;
-        other_row = i / n_x;
-        subsize[0] = chunk_h + ((other_row < extra_h) ? 1 : 0);
-        subsize[1] = chunk_w + ((other_col < extra_w) ? 1 : 0);
-        offsets[0] = other_row * chunk_h + std::min(other_row, extra_h);
-        offsets[1] = other_col * chunk_w + std::min(other_col, extra_w);
-        //rank_local_size[2 * i + 0] = subsize[1];
-        //rank_local_size[2 * i + 1] = subsize[0];
-        //rank_local_start[2 * i + 0] = (other_col == 0) ? 0 : 1;
-        //rank_local_start[2 * i + 1] = (other_row == 0) ? 0 : 1;
-        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &other_scalar[i]);
-        MPI_Type_commit(&other_scalar[i]);
-        MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &other_bool[i]);
-        MPI_Type_commit(&other_bool[i]);
-    }
-
     int dims[3] = {n_z, n_y, n_x};
     int periods[3] = {0, 0, 0};
     int reorder = 0;
     MPI_Cart_Create(MPI_COMM_WORLD, 3, dims, periods, reorder, &cart_comm);
 
+    // create data types for exchanging data with neighbors
     int sizes3D[3] = {int(dim_z), int(dim_y), int(dim_x)};
+    int subsize3D[3] = {int(num_z), int(num_y), int(num_x)};
+    int offsets3D[3] = {int(offset_z), int(offset_y), int(offset_x)};
+
+    MPI_Type_create_subarray(3, sizes3D, subsize3D, offsets3D, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
+    MPI_Type_commit(&own_scalar);
+    MPI_Type_create_subarray(3, sizes3D, subsize3D, offsets3D, MPI_ORDER_C, MPI_BYTE, &own_bool);
+    MPI_Type_commit(&own_bool);
+
+    other_scalar = new MPI_Datatype[num_ranks];
+    other_bool = new MPI_Datatype[num_ranks];
+    for (int r = 0; r < num_ranks; r++)
+    {
+	int col = r % n_x;
+	int row = (r / n_x) % n_y;
+	int layer = r / (n_x * n_y);
+
+	    int osub[3] = {
+		int(chunk_d + ((layer < extra_d) ? 1 : 0)),
+		int(chunk_h + ((row < extra_h) ? 1 : 0)),
+		int(chunk_w + ((width < extra_w) ? 1 : 0)),
+	    };
+	    
+	    int ooffset[3] = {
+		int(layer * chunk_d + std::min(layer, extra_d)),
+		int(row   * chunk_h + std::min(row,   extra_h)),
+		int(col   * chunk_w + std::min(col,   extra_w))
+	    }
+	    
+	    MPI_Type_create_subarray(3, sizes3D, osub, ooffset, MPI_ORDER_C, MPI_DOUBLE, &other_scalar[r]);
+    	    MPI_Type_commit(&other_scalar[r]);
+    	    MPI_Type_create_subarray(3, sizes3D, osub, ooffset, MPI_ORDER_C, MPI_BYTE,   &other_bool[r]);
+    	    MPI_Type_commit(&other_bool[r]);
+    }
+
+    // create data types for exchanging data with neighbors
+    //int block_width, block_height, array[2], subsize[2], offsets[2];
+    //block_width = num_x + neighbor_cols;
+    //block_height = num_y + neighbor_rows;
+    //array[0] = block_height;
+    //array[1] = block_width;
+    //subsize[0] = num_y;
+    //subsize[1] = 1;
+    //offsets[0] = start_y;
+    //offsets[1] = 0;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftBoundaryCol]);
+    //MPI_Type_commit(&columns_2d[LeftBoundaryCol]); // left boundary column
+    //offsets[1] = start_x;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[LeftCol]);
+    //MPI_Type_commit(&columns_2d[LeftCol]); // left column
+    //offsets[1] = start_x + num_x - 1;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightCol]);
+    //MPI_Type_commit(&columns_2d[RightCol]); // right column
+    //offsets[1] = block_width - 1;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &columns_2d[RightBoundaryCol]);
+    //MPI_Type_commit(&columns_2d[RightBoundaryCol]); // right boundary column
+    //// create data types for gathering data 
+    //subsize[1] = num_x;
+    //offsets[1] = start_x;
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &own_scalar);
+    //MPI_Type_commit(&own_scalar);
+    //MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &own_bool);
+    //MPI_Type_commit(&own_bool);
+    //other_scalar = new MPI_Datatype[num_ranks];
+    //other_bool = new MPI_Datatype[num_ranks];
+   
+    //int i;
+    //int other_col;
+    //int other_row;
+    //array[0] = height;
+    //array[1] = width;
+    ////rank_local_size = new uint32_t[2 * num_ranks];
+    ////rank_local_start = new uint32_t[2 * num_ranks];
+    //for (i=0; i<num_ranks; i++)
+    //{
+    //    other_col = i % n_x;
+    //    other_row = i / n_x;
+    //    subsize[0] = chunk_h + ((other_row < extra_h) ? 1 : 0);
+    //    subsize[1] = chunk_w + ((other_col < extra_w) ? 1 : 0);
+    //    offsets[0] = other_row * chunk_h + std::min(other_row, extra_h);
+    //    offsets[1] = other_col * chunk_w + std::min(other_col, extra_w);
+    //    //rank_local_size[2 * i + 0] = subsize[1];
+    //    //rank_local_size[2 * i + 1] = subsize[0];
+    //    //rank_local_start[2 * i + 0] = (other_col == 0) ? 0 : 1;
+    //    //rank_local_start[2 * i + 1] = (other_row == 0) ? 0 : 1;
+    //    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_DOUBLE, &other_scalar[i]);
+    //    MPI_Type_commit(&other_scalar[i]);
+    //    MPI_Type_create_subarray(2, array, subsize, offsets, MPI_ORDER_C, MPI_BYTE, &other_bool[i]);
+    //    MPI_Type_commit(&other_bool[i]);
+    //}
 
     //X-Faces
     int subsX[3]   = {int(num_z), int(num_y), 1};
@@ -425,10 +460,21 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 // destructor
 LbmD3Q15::~LbmD3Q15()
 {
-    MPI_Type_free(&columns_2d[LeftBoundaryCol]);
-    MPI_Type_free(&columns_2d[LeftCol]);
-    MPI_Type_free(&columns_2d[RightCol]);
-    MPI_Type_free(&columns_2d[RightBoundaryCol]);
+    MPI_Type_free(&faceXlo);
+    MPI_Type_free(&faceXhi);
+    MPI_Type_free(&faceYlo);
+    MPI_Type_free(&faceYhi);
+    MPI_Type_free(&faceZlo);
+    MPI_Type_free(&faceZhi);
+
+    MPI_Type_free(&faceN);
+    MPI_Type_free(&faceS);
+    MPI_Type_free(&faceE);
+    MPI_Type_free(&faceW);
+    MPI_Type_free(&faceNE);
+    MPI_Type_free(&faceNW);
+    MPI_Type_free(&faceSE);
+    MPI_Type_free(&faceSW);
 
     MPI_Type_free(&own_scalar);
     MPI_Type_free(&own_bool);
@@ -439,13 +485,44 @@ LbmD3Q15::~LbmD3Q15()
         MPI_Type_free(&other_bool[i]);
     }
 
+    delete[] other_scalar;
+    delete[] other_bool;
     //delete[] rank_local_size;
     //delete[] rank_local_start;
     delete[] f;
+    delete{} density;
+    delete[] velocity_x;
+    delete[] velocity_y;
+    delete[] velocity_z;
+    delete[] vorticity;
+    delete[] speed;
     delete[] barrier;
+    delete[] recv_buf;
+    delete[] brecv_buf;
 }
 
-
+// destructor
+//LbmD3Q15::~LbmD3Q15()
+//{
+//    MPI_Type_free(&columns_2d[LeftBoundaryCol]);
+//    MPI_Type_free(&columns_2d[LeftCol]);
+//    MPI_Type_free(&columns_2d[RightCol]);
+//    MPI_Type_free(&columns_2d[RightBoundaryCol]);
+//
+//    MPI_Type_free(&own_scalar);
+//    MPI_Type_free(&own_bool);
+//    int i;
+//    for (i=0; i<num_ranks; i++)
+//    {
+//        MPI_Type_free(&other_scalar[i]);
+//        MPI_Type_free(&other_bool[i]);
+//    }
+//
+//    //delete[] rank_local_size;
+//    //delete[] rank_local_start;
+//    delete[] f;
+//    delete[] barrier;
+//}
 
 // initialize barrier based on selected type
 void LbmD3Q15::initBarrier(std::vector<Barrier*> barriers)
@@ -977,26 +1054,68 @@ void LbmD3Q15::gatherDataOnRank0(FluidProperty property)
     }
 
     MPI_Status status;
-    MPI_Request request;
+
     if (rank == 0)
     {
-        int i;
-        MPI_Sendrecv(send_buf, 1, own_scalar, 0, 0, recv_buf, 1, other_scalar[0], 0, 0, MPI_COMM_WORLD, &status);
-        MPI_Sendrecv(bsend_buf, 1, own_bool, 0, 0, brecv_buf, 1, other_bool[0], 0, 0, MPI_COMM_WORLD, &status);
-        for (i = 1; i < num_ranks; i++)
-        {
-            MPI_Recv(recv_buf, 1, other_scalar[i], i, 0, MPI_COMM_WORLD, &status);
-            MPI_Recv(brecv_buf, 1, other_bool[i], i, 1, MPI_COMM_WORLD, &status);
-        }
+	MPI_Sendrecv(send_buf,  1, own_scalar, rank, TAG_F, recv_buf,  1, other_scalar[rank], rank, TAG_F, cart_comm, &status);
+	MPI_Sendrecv(bsend_buf, 1, own_bool,   rank, TAG_B, brecv_buf, 1, other_bool[rank],   rank, TAG_B, cart_comm, &status);
+
+	for (int r = 1; r < num_ranks; r++)
+	{
+	    MPI_Recv(recv_buf, 1, other_scalar[r], r, TAG_F, cart_comm, &status);
+	    MPI_Recv(brecv_buf,1, other_bool[r],   r, TAG_B, cart_comm, &status);
+	}
     }
     else
     {
-        MPI_Send(send_buf, 1, own_scalar, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(bsend_buf, 1, own_bool, 0, 1, MPI_COMM_WORLD);
+	MPI_Send(send_buf,    1, own_scalar, 0, TAG_F, cart_comm);
+        MPI_Send(bsend_buf,   1, own_bool,   0, TAG_B, cart_comm);
     }
 
     stored_property = property;
 }
+
+// gather all data on rank 0
+//void LbmD3Q15::gatherDataOnRank0(FluidProperty property)
+//{
+//    double *send_buf = NULL;
+//    bool *bsend_buf = barrier;
+//    switch (property)
+//    {
+//        case Density:
+//            send_buf = density;
+//            break;
+//        case Speed:
+//            send_buf = speed;
+//            break;
+//        case Vorticity:
+//            send_buf = vorticity;
+//            break;
+//        case None:
+//            return;
+//    }
+//
+//    MPI_Status status;
+//    MPI_Request request;
+//    if (rank == 0)
+//    {
+//        int i;
+//        MPI_Sendrecv(send_buf, 1, own_scalar, 0, 0, recv_buf, 1, other_scalar[0], 0, 0, MPI_COMM_WORLD, &status);
+//        MPI_Sendrecv(bsend_buf, 1, own_bool, 0, 0, brecv_buf, 1, other_bool[0], 0, 0, MPI_COMM_WORLD, &status);
+//        for (i = 1; i < num_ranks; i++)
+//        {
+//            MPI_Recv(recv_buf, 1, other_scalar[i], i, 0, MPI_COMM_WORLD, &status);
+//            MPI_Recv(brecv_buf, 1, other_bool[i], i, 1, MPI_COMM_WORLD, &status);
+//        }
+//    }
+//    else
+//    {
+//        MPI_Send(send_buf, 1, own_scalar, 0, 0, MPI_COMM_WORLD);
+//        MPI_Send(bsend_buf, 1, own_bool, 0, 1, MPI_COMM_WORLD);
+//    }
+//
+//    stored_property = property;
+//}
 
 // get width of sub-area this task owns (including ghost cells)
 uint32_t LbmD3Q15::getDimX()
@@ -1088,16 +1207,16 @@ uint32_t LbmD3Q15::getSizeZ()
 }
 
 // get the local width and height of a particular rank's data
-//uint32_t* LbmD3Q15::getRankLocalSize(int rank)
-//{
-//    return rank_local_size + (2 * rank);
-//}
+uint32_t* LbmD3Q15::getRankLocalSize(int rank)
+{
+    return rank_local_size + (2 * rank);
+}
 
 // get the local x and y start of a particular rank's data
-//uint32_t* LbmD3Q15::getRankLocalStart(int rank)
-//{
-//    return rank_local_start + (2 * rank);
-//}
+uint32_t* LbmD3Q15::getRankLocalStart(int rank)
+{
+    return rank_local_start + (2 * rank);
+}
 
 // get barrier array
 bool* LbmD3Q15::getBarrier()
@@ -1106,66 +1225,62 @@ bool* LbmD3Q15::getBarrier()
     return brecv_buf;
 }
 
-
 // get density array
-double* LbmD3Q15::getDensity()
+inline double* LbmD3Q15::getDensity()
 {
     return density;
 }
 
 // get velocity x array
-double* LbmD3Q15::getVelocityX()
+inline double* LbmD3Q15::getVelocityX()
 {
     return velocity_x;
 }
 
 // get velocity y array
-double* LbmD3Q15::getVelocityY()
+inline double* LbmD3Q15::getVelocityY()
 {
     return velocity_y;
 }
 
 // get velocity z array
-double* LbmD3Q15::getVelocityZ()
+inline double* LbmD3Q15::getVelocityZ()
 {
     return velocity_z;
 }
 
 // get vorticity array
-double* LbmD3Q15::getVorticity()
+inline double* LbmD3Q15::getVorticity()
 {
     return vorticity;
 }
 
 // get vorticity array
-double* LbmD3Q15::getSpeed()
+inline double* LbmD3Q15::getSpeed()
 {
     return speed;
 }
 
-
-/*
 // get density array
-double* LbmD3Q15::getDensity()
+inline double* LbmD3Q15::getDensity()
 {
     if (rank != 0 || stored_property != Density) return NULL;
     return recv_buf;
 }
 
 // get vorticity array
-double* LbmD3Q15::getVorticity()
+inline double* LbmD3Q15::getVorticity()
 {
     if (rank != 0 || stored_property != Vorticity) return NULL;
     return recv_buf;
 }
 
 // get speed array
-double* LbmD3Q15::getSpeed()
+inline double* LbmD3Q15::getSpeed()
 {
     if (rank != 0 || stored_property != Speed) return NULL;
     return recv_buf;
 }
-*/
 
 // private - set fluid equalibrium
 void LbmD3Q15::setEquilibrium(int x, int y, int z, double new_velocity_x, double new_velocity_y, double new_velocity_z, double new_density)
@@ -1322,6 +1437,7 @@ void LbmD3Q15::exchangeBoundaries()
     MPI_Sendrecv(velocity_z, 1, faceZlo, neighbors[NeighborDown], TAG_VZ,
                  velocity_z, 1, faceZhi, neighbors[NeighborUp], TAG_VZ,
                  cart_comm, MPI_STATUS_IGNORE);
+}
 
 //    if (neighbors[NeighborN] >= 0)
 //    {
@@ -1443,7 +1559,5 @@ void LbmD3Q15::exchangeBoundaries()
 //        MPI_Sendrecv(&(velocity_x[sy * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(velocity_x[0]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
 //        MPI_Sendrecv(&(velocity_y[sy * nx + sx]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborNE, &(velocity_y[0]), 1, MPI_DOUBLE, neighbors[NeighborSW], NeighborSW, MPI_COMM_WORLD, &status);
 //    }
-}
-
 
 #endif // _LBMD3Q15_MPI_HPP_

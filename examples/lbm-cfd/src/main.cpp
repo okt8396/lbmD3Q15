@@ -8,9 +8,9 @@
 //#include <conduit_blueprint_mpi.hpp>
 //#endif
 
-#include "lbmd2q9_mpi.hpp"
+#include "lbmd3q15_mpi.hpp"
 
-void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y, uint32_t time_steps, void *ptr);
+void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y, uint32_t dim_z, uint32_t time_steps, void *ptr);
 void createDivergingColorMap(uint8_t *cmap, uint32_t size);
 //#ifdef ASCENT_ENABLED
 //void updateAscentData(int rank, int num_ranks, int step, double time, conduit::Node &mesh);
@@ -22,9 +22,9 @@ int32_t readFile(const char *filename, char** data_ptr);
 
 // global vars for LBM and Barriers
 std::vector<Barrier*> barriers;
-LbmD2Q9 *lbm;
+LbmD3Q15 *lbm;
 
-//std::cout << "Lbm = " << LbmD2Q9 << "\n";
+//std::cout << "Lbm = " << LbmD3Q15 << "\n";
 
 int main(int argc, char **argv) {
     int rc, rank, num_ranks;
@@ -42,10 +42,11 @@ int main(int argc, char **argv) {
 
     uint32_t dim_x = 600;
     uint32_t dim_y = 240;
+    uint32_t dim_z = 240;
     uint32_t time_steps = 20000;
 
     if (rank == 0) std::cout << "LBM-CFD> running with " << num_ranks << " processes" << std::endl;
-    if (rank == 0) std::cout << "LBM-CFD> resolution=" << dim_x << "x" << dim_y << ", time steps=" << time_steps << std::endl;
+    if (rank == 0) std::cout << "LBM-CFD> resolution=" << dim_x << "x" << dim_y << "x" << dim_z << ", time steps=" << time_steps << std::endl;
 
     void *ascent_ptr = NULL;
 
@@ -71,7 +72,7 @@ int main(int argc, char **argv) {
 //#endif
 
     // Run simulation
-    runLbmCfdSimulation(rank, num_ranks, dim_x, dim_y, time_steps, ascent_ptr);
+    runLbmCfdSimulation(rank, num_ranks, dim_x, dim_y, dim_z, time_steps, ascent_ptr);
 
 //#ifdef ASCENT_ENABLED
 //    ascent.close();
@@ -82,7 +83,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y, uint32_t time_steps, void *ptr)
+void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y, uint32_t dim_z, uint32_t time_steps, void *ptr)
 {
     // simulate corn syrup at 25 C in a 2 m pipe, moving 0.75 m/s for 8 sec
     double physical_density = 1380.0;     // kg/m^3
@@ -99,13 +100,6 @@ void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y
     double simulation_speed_scale = simulation_dt / simulation_dx;
     double simulation_speed = simulation_speed_scale * physical_speed;
     double simulation_viscosity = simulation_dt / (simulation_dx * simulation_dx * reynolds_number);
-    
-    //std::cout << "sim_dx= " << simulation_dx << "\n";
-    //std::cout << "sim_dt= " << simulation_dt << "\n";
-    //std::cout << "sim_sp_sc= " << simulation_speed_scale << "\n";
-    //std::cout << "sim_speed= " << simulation_speed << "\n";
-    //std::cout << "sim_visc= " << simulation_viscosity << "\n";
-
 
     // output simulation properties
     if (rank == 0)
@@ -115,7 +109,7 @@ void runLbmCfdSimulation(int rank, int num_ranks, uint32_t dim_x, uint32_t dim_y
     }
     
     // create LBM object
-    lbm = new LbmD2Q9(dim_x, dim_y, simulation_speed_scale, rank, num_ranks);
+    lbm = new LbmD3Q15(dim_x, dim_y, dim_z, simulation_speed_scale, rank, num_ranks);
     
     // initialize simulation
     // barrier: center-gap
