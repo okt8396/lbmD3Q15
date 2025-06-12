@@ -129,7 +129,7 @@ class LbmD3Q15
 	MPI_Datatype faceNW, faceSE;
 
 
-        void setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density);
+        void setEquilibrium(int x, int y, int z, double new_velocity_x, double new_velocity_y, double new_velocity_z, double new_density);
         void getClosestFactors3(int value, int *factor_1, int *factor_2, int *factor_3);
         void exchangeBoundaries();
 
@@ -149,20 +149,26 @@ class LbmD3Q15
         void gatherDataOnRank0(FluidProperty property);
         uint32_t getDimX();
         uint32_t getDimY();
+	uint32_t getDimZ();
         uint32_t getTotalDimX();
         uint32_t getTotalDimY();
+	uint32_t getTotalDimZ();
         uint32_t getOffsetX();
         uint32_t getOffsetY();
+	uint32_t getOffsetZ();
         uint32_t getStartX();
         uint32_t getStartY();
+	uint32_t getStartZ();
         uint32_t getSizeX();
         uint32_t getSizeY();
+	uint32_t getSizeZ();
         //uint32_t* getRankLocalSize(int rank);
         //uint32_t* getRankLocalStart(int rank);
         bool* getBarrier();
         double* getDensity();
         double* getVelocityX();
         double* getVelocityY();
+	double* getVelocityZ();
         double* getVorticity();
         double* getSpeed();
 	static constexpr int TAG_F  = 100;
@@ -521,34 +527,85 @@ void LbmD3Q15::initBarrier(std::vector<Barrier*> barriers)
 // initialize fluid
 void LbmD3Q15::initFluid(double physical_speed)
 {
-    int i, j, row;
+    int i, j, k;
     double speed = speed_scale * physical_speed;
-    for (j = 0; j < dim_y; j++)
-    {
-        row = j * dim_x;
-        for (i = 0; i < dim_x; i++)
+    for (k = 0; k < dim_z; k++)
         {
-            setEquilibrium(i, j, speed, 0.0, 1.0);
-            vorticity[row + i] = 0.0;
+        for (j = 0; j < dim_y; j++)
+        {
+            for (i = 0; i < dim_x; i++)
+            {
+                setEquilibrium(i, j, k, speed, 0.0, 0.0, 1.0);
+                vorticity[idx3D(i, j, k)] = 0.0;
+            }
+        }
+	}
+}
+
+// initialize fluid
+//void LbmD3Q15::initFluid(double physical_speed)
+//{
+//    int i, j, row;
+//    double speed = speed_scale * physical_speed;
+//    for (j = 0; j < dim_y; j++)
+//    {
+//        row = j * dim_x;
+//        for (i = 0; i < dim_x; i++)
+//        {
+//            setEquilibrium(i, j, speed, 0.0, 1.0);
+//            vorticity[row + i] = 0.0;
+//        }
+//    }
+//}
+
+void LbmD3Q15::updateFluid(double physical_speed)
+{
+    int i; int j; int k;
+    double speed = speed_scale * physical_speed;
+
+    for (k = 0; k < dim_z; k++)
+    {
+	for (i = 0; i < dim_x; i++)
+    	{
+        setEquilibrium(i, 0, k, speed, 0.0, 0.0, 1.0);
+        setEquilibrium(i, dim_y - 1, k, speed, 0.0, 0.0, 1.0);
+    	}
+    }
+    
+    for (k = 0; k < dim_z; k++)
+    {
+        for (j = 0; j < dim_y; j++)
+        {
+        setEquilibrium(0, j, k, speed, 0.0, 0.0, 1.0);
+        setEquilibrium(dim_x - 1, j, k, speed, 0.0, 0.0, 1.0);
+        }
+    }
+
+    for (j = 0; j < dim_y - 1; j++)
+    {
+        for (i = 0; i < dim_x - 1; i++)
+        {
+        setEquilibrium(i, j, 0, speed, 0.0, 0.0, 1.0);
+        setEquilibrium(i, j, dim_z - 1, speed, 0.0, 0.0, 1.0);
         }
     }
 }
 
-void LbmD3Q15::updateFluid(double physical_speed)
-{
-    int i;
-    double speed = speed_scale * physical_speed;
-    for (i = 0; i < dim_x; i++)
-    {
-        setEquilibrium(i, 0, speed, 0.0, 1.0);
-        setEquilibrium(i, dim_y - 1, speed, 0.0, 1.0);
-    }
-    for (i = 1; i < dim_y - 1; i++)
-    {
-        setEquilibrium(0, i, speed, 0.0, 1.0);
-        setEquilibrium(dim_x - 1, i, speed, 0.0, 1.0);
-    }
-}
+//void LbmD3Q15::updateFluid(double physical_speed)
+//{
+//    int i;
+//    double speed = speed_scale * physical_speed;
+//    for (i = 0; i < dim_x; i++)
+//    {
+//        setEquilibrium(i, 0, speed, 0.0, 1.0);
+//        setEquilibrium(i, dim_y - 1, speed, 0.0, 1.0);
+//    }
+//    for (i = 1; i < dim_y - 1; i++)
+//    {
+//        setEquilibrium(0, i, speed, 0.0, 1.0);
+//        setEquilibrium(dim_x - 1, i, speed, 0.0, 1.0);
+//    }
+//}
 
 // particle collision
 void LbmD3Q15::collide(double viscosity)
@@ -632,8 +689,8 @@ void LbmD3Q15::collide(double viscosity)
 void LbmD3Q15::stream()
 {
 	size_t slice = static_cast<size_t>(dim_x) * dim_y * dim_z;
-	double* f_Old = new double[15 * slice];
-	std::memcpy(f_Old, f, 15 * slice * sizeof(double));
+	double* f_Old = new double[Q * slice];
+	std::memcpy(f_Old, f, Q * slice * sizeof(double));
 
 	for (int k = start_z; k < dim_z - start_z; ++k) {
 		for (int j = start_y; j < dim_y - start_y; ++j) {
@@ -703,81 +760,159 @@ void LbmD3Q15::stream()
 // particle streaming bouncing back off of barriers
 void LbmD3Q15::bounceBackStream()
 {
-    int i, j, row, rowp, rown, idx;
-    for (j = 1; j < dim_y - 1; j++) // handle bounce-back from barriers
-    {
-        row = j * dim_x;
-        rowp = (j - 1) * dim_x;
-        rown = (j + 1) * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            idx = row + i;
-            if (barrier[row + i - 1])
-            {
-                f_2[idx] = f_4[row + i - 1];
-            }
-            if (barrier[row + i + 1])
-            {
-                f_4[idx] = f_2[row + i + 1];
-            }
-            if (barrier[rowp + i])
-            {
-                f_1[idx] =   f_3[rowp + i];
-            }
-            if (barrier[rown + i])
-            {
-                f_3[idx] =   f_1[rown + i];
-            }
-            if (barrier[rowp + i - 1])
-            {
-                f_5[idx] =  f_8[rowp + i - 1];
-            }
-            if (barrier[rowp + i + 1])
-            {
-                f_6[idx] =  f_7[rowp + i + 1];
-            }
-            if (barrier[rown + i - 1])
-            {
-                f_7[idx] =  f_6[rown + i - 1];
-            }
-            if (barrier[rown + i + 1])
-            {
-                f_8[idx] =  f_5[rown + i + 1];
-            }
-        }
-    }
+	size_t slice = static_cast<size_t>(dim_x) * dim_y * dim_z;
+	double f_Old = new double[Q * slice];
+	std::memcpy(f_Old, f, Q * slice * sizeof(double));
+
+	for (int k = start_z; k < dim_z - start_z; ++k)
+	{
+		for (int j = start_y; j < dim_y - start_y; ++j)
+		{
+			for (int i = start_x; i < dim_x - start_x; ++i)
+			{
+				int idx = idx3D(i, j, k);
+
+				for (int d = 1; d < Q; ++d)
+				{
+					int ni = i + cD3Q15[d][0];
+					int nj = j + cD3Q15[d][1];
+					int nk = k + cD3Q15[d][2];
+					int nidx = idx3D(ni, nj, nk);
+
+					if (barrier[nidx])
+					{
+						int od = 0;
+						for (int dd = 1; dd < Q; ++dd)
+						{
+							if (cD3Q15[dd][0] == -cD3Q15[d][0] && cD3Q15[dd][1] == -cD3Q15[d][1] && cD3Q15[dd][2] == -cD3Q15[d][2])
+							{
+								od = dd;
+								break;
+							}
+						}
+						f_at(d, i, j, k) = f_Old[od * slice + nidx];
+					}
+				}
+			}
+		}
+	}
+
+	delete[] f_Old;
 }
+	
+//{
+//    int i, j, row, rowp, rown, idx;
+//    for (j = 1; j < dim_y - 1; j++) // handle bounce-back from barriers
+//    {
+//        row = j * dim_x;
+//        rowp = (j - 1) * dim_x;
+//        rown = (j + 1) * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            idx = row + i;
+//            if (barrier[row + i - 1])
+//            {
+//                f_2[idx] = f_4[row + i - 1];
+//            }
+//            if (barrier[row + i + 1])
+//            {
+//                f_4[idx] = f_2[row + i + 1];
+//            }
+//            if (barrier[rowp + i])
+//            {
+//                f_1[idx] =   f_3[rowp + i];
+//            }
+//            if (barrier[rown + i])
+//            {
+//                f_3[idx] =   f_1[rown + i];
+//            }
+//            if (barrier[rowp + i - 1])
+//            {
+//                f_5[idx] =  f_8[rowp + i - 1];
+//            }
+//            if (barrier[rowp + i + 1])
+//            {
+//                f_6[idx] =  f_7[rowp + i + 1];
+//            }
+//            if (barrier[rown + i - 1])
+//            {
+//                f_7[idx] =  f_6[rown + i - 1];
+//            }
+//            if (barrier[rown + i + 1])
+//            {
+//                f_8[idx] =  f_5[rown + i + 1];
+//            }
+//        }
+//    }
+//}
 
 // check if simulation has become unstable (if so, more time steps are required)
 bool LbmD3Q15::checkStability()
 {
-    int i, idx;
+    int i, k, idx;
     bool stable = true;
-
-    for (i = 0; i < dim_x; i++)
+    int j = dim_y / 2;
+    for (k = 0; k < dim_z; k++)
     {
-        idx = (dim_y / 2) * dim_x + i;
-        if (density[idx] <= 0)
-        {
-            stable = false;
-        }
+	for (i = 0; i < dim_x; i++)
+	    {
+	        idx = idx3D(i, j, k);
+		if (density[idx] <= 0)
+		{
+		    stable = false;
+		}
+	    }
     }
     return stable;
 }
 
+// check if simulation has become unstable (if so, more time steps are required)
+//bool LbmD3Q15::checkStability()
+//{
+//    int i, idx;
+//    bool stable = true;
+//
+//    for (i = 0; i < dim_x; i++)
+//    {
+//        idx = (dim_y / 2) * dim_x + i;
+//        if (density[idx] <= 0)
+//        {
+//            stable = false;
+//        }
+//    }
+//    return stable;
+//}
+
 // compute speed (magnitude of velocity vector)
 void LbmD3Q15::computeSpeed()
 {
-    int i, j, row;
-    for (j = 1; j < dim_y - 1; j++)
+    int i, j, k, idx;
+    for (k = 1; k < dim_z - 1; k++)
     {
-        row = j * dim_x;
-        for (i = 1; i < dim_x - 1; i++)
-        {
-            speed[row + i] = sqrt(velocity_x[row + i] * velocity_x[row + i] + velocity_y[row + i] * velocity_y[row + i]);
-        }
+	for (j = 1; j < dim_y - 1; j++)
+	{
+            for (i = 1; i < dim_x - 1; i++)
+            {
+		idx = idx3D(i, j, k);
+		speed[idx] = sqrt(velocity[idx] * velocity_x[idx] + velocity_y[idx] * velocity_y[idx] + velocity_z[idx] * velocity_z[idx]);
+	    }
+	}
     }
 }
+
+// compute speed (magnitude of velocity vector)
+//void LbmD3Q15::computeSpeed()
+//{
+//    int i, j, row;
+//    for (j = 1; j < dim_y - 1; j++)
+//    {
+//        row = j * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            speed[row + i] = sqrt(velocity_x[row + i] * velocity_x[row + i] + velocity_y[row + i] * velocity_y[row + i]);
+//        }
+//    }
+//}
 
 // compute vorticity (rotational velocity)
 void LbmD3Q15::computeVorticity()
@@ -794,6 +929,22 @@ void LbmD3Q15::computeVorticity()
         }
     }
 }
+
+// compute vorticity (rotational velocity)
+//void LbmD3Q15::computeVorticity()
+//{
+//    int i, j, row, rowp, rown;
+//    for (j = 1; j < dim_y - 1; j++)
+//    {
+//        row = j * dim_x;
+//        rowp = (j - 1) * dim_x;
+//        rown = (j + 1) * dim_x;
+//        for (i = 1; i < dim_x - 1; i++)
+//        {
+//            vorticity[row + i] = velocity_y[row + i + 1] - velocity_y[row + i - 1] - velocity_x[rown + i] + velocity_x[rowp + i];
+//        }
+//    }
+//}
 
 // gather all data on rank 0
 void LbmD3Q15::gatherDataOnRank0(FluidProperty property)
@@ -849,6 +1000,12 @@ uint32_t LbmD3Q15::getDimY()
     return dim_y;
 }
 
+// get width of sub-area this task owns (including ghost cells)
+uint32_t LbmD3Q15::getDimZ()
+{
+    return dim_z;
+}
+
 // get width of total area of simulation
 uint32_t LbmD3Q15::getTotalDimX()
 {
@@ -859,6 +1016,12 @@ uint32_t LbmD3Q15::getTotalDimX()
 uint32_t LbmD3Q15::getTotalDimY()
 {
     return total_y;
+}
+
+// get width of total area of simulation
+uint32_t LbmD3Q15::getTotalDimZ()
+{
+    return total_z;
 }
 
 // get x offset into overall domain where this sub-area esxists
@@ -873,6 +1036,12 @@ uint32_t LbmD3Q15::getOffsetY()
     return offset_y;
 }
 
+// get z offset into overall domain where this sub-area esxists
+uint32_t LbmD3Q15::getOffsetZ()
+{
+    return offset_z;
+}
+
 // get x start for valid data (0 if no ghost cell on left, 1 if there is a ghost cell on left)
 uint32_t LbmD3Q15::getStartX()
 {
@@ -885,6 +1054,11 @@ uint32_t LbmD3Q15::getStartY()
     return start_y;
 }
 
+// get z start for valid data (0 if no ghost cell on top, 1 if there is a ghost cell on top)uint32_t LbmD3Q15::getStartZ()
+{
+    return start_z;
+}
+
 // get width of sub-area this task is responsible for (excluding ghost cells)
 uint32_t LbmD3Q15::getSizeX()
 {
@@ -895,6 +1069,12 @@ uint32_t LbmD3Q15::getSizeX()
 uint32_t LbmD3Q15::getSizeY()
 {
     return num_y;
+}
+
+// get width of sub-area this task is responsible for (excluding ghost cells)
+uint32_t LbmD3Q15::getSizeZ()
+{
+    return num_z;
 }
 
 // get the local width and height of a particular rank's data
@@ -929,10 +1109,16 @@ double* LbmD3Q15::getVelocityX()
     return velocity_x;
 }
 
-// get density array
+// get velocity y array
 double* LbmD3Q15::getVelocityY()
 {
     return velocity_y;
+}
+
+// get velocity z array
+double* LbmD3Q15::getVelocityZ()
+{
+    return velocity_z;
 }
 
 // get vorticity array
@@ -972,46 +1158,86 @@ double* LbmD3Q15::getSpeed()
 */
 
 // private - set fluid equalibrium
-void LbmD3Q15::setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density)
+void LbmD3Q15::setEquilibrium(int x, int y, int z, double new_velocity_x, double new_velocity_y, double new_velocity_z, double new_density)
 {
-    int idx = y * dim_x + x;
+	int idx = idx3D(x, y, z);
 
-    double one_ninth = 1.0 / 9.0;
-    double four_ninths = 4.0 / 9.0;
-    double one_thirtysixth = 1.0 / 36.0;
+	density[idx] = new_density;
+	velocity_x[idx] = new_velocity_x;
+	velocity_y[idx] = new_velocity_y;
+	velocity_z[idx] = new_velocity_z;
 
-    double velocity_3x   = 3.0 * new_velocity_x;
-    double velocity_3y   = 3.0 * new_velocity_y;
-    double velocity_x2   = new_velocity_x * new_velocity_x;
-    double velocity_y2   = new_velocity_y * new_velocity_y;
-    double velocity_2xy  = 2.0 * new_velocity_x * new_velocity_y;
-    double vecocity_2    = velocity_x2 + velocity_y2;
-    double vecocity_2_15 = 1.5 * vecocity_2;
-    f_0[idx]  = four_ninths     * new_density * (1.0                                                                 - vecocity_2_15);
-    f_2[idx]  = one_ninth       * new_density * (1.0 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
-    f_4[idx]  = one_ninth       * new_density * (1.0 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
-    f_1[idx]  = one_ninth       * new_density * (1.0 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
-    f_3[idx]  = one_ninth       * new_density * (1.0 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
-    f_5[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
-    f_7[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
-    f_6[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
-    f_8[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
-    density[idx]    = new_density;
-    velocity_x[idx] = new_velocity_x;
-    velocity_y[idx] = new_velocity_y;
+	double ux = new_velocity_x;
+	double uy = new_velocity_y;
+	double uz = new_velocity_z;
+	double usq = ux*ux + uy*uy + uz*uz;
+
+	for (int d = 0; d < Q; ++d)
+	{
+		double cu = 3.0 * (cD3Q15[d][0] * ux + cD3Q15[d][1] * uy + cD3Q15[d][2] * uz);
+		f_at(d, x, y, z) = wD3Q15[d] * new_density * (1.0 + cu + 0.5*cu*cu - 1.5*usq);
+	}
+
+//void LbmD3Q15::setEquilibrium(int x, int y, double new_velocity_x, double new_velocity_y, double new_density)
+//{
+//    int idx = y * dim_x + x;
+//
+//    double one_ninth = 1.0 / 9.0;
+//    double four_ninths = 4.0 / 9.0;
+//    double one_thirtysixth = 1.0 / 36.0;
+//
+//    double velocity_3x   = 3.0 * new_velocity_x;
+//    double velocity_3y   = 3.0 * new_velocity_y;
+//    double velocity_x2   = new_velocity_x * new_velocity_x;
+//    double velocity_y2   = new_velocity_y * new_velocity_y;
+//    double velocity_2xy  = 2.0 * new_velocity_x * new_velocity_y;
+//    double vecocity_2    = velocity_x2 + velocity_y2;
+//    double vecocity_2_15 = 1.5 * vecocity_2;
+//    f_0[idx]  = four_ninths     * new_density * (1.0                                                                 - vecocity_2_15);
+//    f_2[idx]  = one_ninth       * new_density * (1.0 + velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
+//    f_4[idx]  = one_ninth       * new_density * (1.0 - velocity_3x               + 4.5 * velocity_x2                 - vecocity_2_15);
+//    f_1[idx]  = one_ninth       * new_density * (1.0 + velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
+//    f_3[idx]  = one_ninth       * new_density * (1.0 - velocity_3y               + 4.5 * velocity_y2                 - vecocity_2_15);
+//    f_5[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x + velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
+//    f_7[idx] = one_thirtysixth * new_density * (1.0 + velocity_3x - velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
+//    f_6[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x + velocity_3y + 4.5 * (vecocity_2 - velocity_2xy) - vecocity_2_15);
+//    f_8[idx] = one_thirtysixth * new_density * (1.0 - velocity_3x - velocity_3y + 4.5 * (vecocity_2 + velocity_2xy) - vecocity_2_15);
+//    density[idx]    = new_density;
+//    velocity_x[idx] = new_velocity_x;
+//    velocity_y[idx] = new_velocity_y;
+//}
+
+// private - get 3 factors of a given number that are closest to each other
+void LbmD3Q15::getClosestFactors3(int value, int *factor_1, int *factor_2, int *factor_3)
+{
+    int test_num = (int)cbrt(value);
+    while (test_num > 0 && value % test_num != 0)
+    {
+	test_num--;
+    }
+
+    int rem = value / test_num;
+    int test_num2 = (int)sqrt(rem);
+    while (test_num2 > 0 && rem % test_num2 != 0)
+    {
+        test_num2--;
+    }
+    *factor_3 = test_num;        //nz
+    *factor_2 = test_num2;       //ny
+    *factor_1 = rem / test_num2; //nx
 }
 
 // private - get 2 factors of a given number that are closest to each other
-void LbmD3Q15::getClosestFactors2(int value, int *factor_1, int *factor_2)
-{
-    int test_num = (int)sqrt(value);
-    while (value % test_num != 0)
-    {
-        test_num--;
-    }
-    *factor_2 = test_num;
-    *factor_1 = value / test_num;
-}
+//void LbmD3Q15::getClosestFactors2(int value, int *factor_1, int *factor_2)
+//{
+//    int test_num = (int)sqrt(value);
+//    while (value % test_num != 0)
+//    {
+//        test_num--;
+//    }
+//    *factor_2 = test_num;
+//    *factor_1 = value / test_num;
+//}
 
 // private - exchange boundary information between MPI ranks
 void LbmD3Q15::exchangeBoundaries()
