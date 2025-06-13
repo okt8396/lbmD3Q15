@@ -128,6 +128,13 @@ class LbmD3Q15
 	MPI_Datatype faceSW, faceNE;
 	MPI_Datatype faceNW, faceSE;
 
+    private:
+        // Add missing member variables
+        double *f_0, *f_1, *f_2, *f_3, *f_4, *f_5, *f_6, *f_7, *f_8, *f_9, *f_10, *f_11, *f_12, *f_13, *f_14;
+        double *dbl_arrays;
+        uint32_t block_width, block_height, block_depth;
+        int idx3D(int x, int y, int z) const;
+        double& f_at(int d, int x, int y, int z) const;
 
         void setEquilibrium(int x, int y, int z, double new_velocity_x, double new_velocity_y, double new_velocity_z, double new_density);
         void getClosestFactors3(int value, int *factor_1, int *factor_2, int *factor_3);
@@ -230,7 +237,7 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
     int dims[3] = {n_z, n_y, n_x};
     int periods[3] = {0, 0, 0};
     int reorder = 0;
-    MPI_Cart_Create(MPI_COMM_WORLD, 3, dims, periods, reorder, &cart_comm);
+    MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &cart_comm);
 
     // create data types for exchanging data with neighbors
     int sizes3D[3] = {int(dim_z), int(dim_y), int(dim_x)};
@@ -353,13 +360,13 @@ LbmD3Q15::LbmD3Q15(uint32_t width, uint32_t height, uint32_t depth, double scale
 
 
     //North
-    int subsN[3]   = {int(num_z), 1, int(num_x);
+    int subsN[3]   = {int(num_z), 1, int(num_x)};
     int offsN[3]   = {int(start_z), int(dim_y - start_y -1), int(start_x)};
     MPI_Type_create_subarray(3, sizes3D, subsN, offsN, MPI_ORDER_C, MPI_DOUBLE, &faceN);
     MPI_Type_commit(&faceN);
 
     //South
-    int subsS[3]   = {int(num_z), 1, int(num_x);
+    int subsS[3]   = {int(num_z), 1, int(num_x)};
     int offsS[3]   = {int(start_z), int(start_y), int(start_x)};
     MPI_Type_create_subarray(3, sizes3D, subsS, offsS, MPI_ORDER_C, MPI_DOUBLE, &faceS);
     MPI_Type_commit(&faceS);
